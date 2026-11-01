@@ -6,6 +6,6 @@ for (const [k, v] of Object.entries(parts)) {
   if (v.includes('</script')) throw new Error(k + ' contains </script');
   html = html.replace(k, () => v);
 }
-fs.mkdirSync(__dirname + '/dist', { recursive: true });
-fs.writeFileSync(__dirname + '/dist/index.html', html);
-console.log('built dist/index.html', (html.length / 1024).toFixed(1) + ' KB');
+fs.mkdirSync(__dirname + '/docs', { recursive: true });
+fs.writeFileSync(__dirname + '/docs/index.html', html);
+console.log('built docs/index.html', (html.length / 1024).toFixed(1) + ' KB');

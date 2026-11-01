@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/fonts|ERR_|net::/.test(m.text())) errors.push('console: ' + m.text()); });
-  await page.goto('file:///home/claude/leaky/dist/index.html');
+  await page.goto('file:///home/claude/leaky/docs/index.html');
   await page.waitForTimeout(300);
   await page.screenshot({ path: '/home/claude/leaky/shots/setup.png' });
   await page.click('[data-act="start"]');

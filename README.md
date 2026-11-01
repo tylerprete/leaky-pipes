@@ -2,6 +2,8 @@
 
 A browser version of the Waterworks leaky-pipe card game (Winning Moves 2–4 player rules), with computer opponents, pass-and-play, and a dead-end warning.
 
+Play it at https://tylerprete.github.io/leaky-pipes/ (GitHub Pages serves `docs/index.html` from `main`).
+
 - `src/engine.js`: rules engine (placement, leaks, repairs, T's and caps, spout, dead-end analysis)
 - `src/bot.js`: computer players. A heuristic scorer (Easy/Normal) and a lookahead search (Hard)
 - `src/ui.js`, `src/style.css`, `src/page.html`: the single-page game
@@ -11,7 +13,7 @@ A browser version of the Waterworks leaky-pipe card game (Winning Moves 2–4 pl
 - `tools/ablate.js`, `tools/analyze.js`: the experiments behind the strategy guide; outputs in `tools/results/`
 
 ```
-npm run build   # writes dist/index.html
+npm run build   # writes docs/index.html (the GitHub Pages site)
 npm test        # rules tests
 node tools/arena.js '{"kind":"search"}' '{"kind":"v2"}' 2 60
 ```

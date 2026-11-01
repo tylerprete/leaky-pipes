@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const page = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = []; page.on('pageerror', e => errs.push(e.message));
-  await page.goto('file:///home/claude/leaky/dist/index.html');
+  await page.goto('file:///home/claude/leaky/docs/index.html');
   await page.click('[data-kind="1:human"]');
   await page.fill('#seat-name-1', 'Giovanna');
   await page.click('[data-act="start"]');

@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  await page.goto('file:///home/claude/leaky/dist/index.html');
+  await page.goto('file:///home/claude/leaky/docs/index.html');
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'shots/v2-setup.png' });
   await page.click('[data-act="start"]');
