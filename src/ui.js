@@ -782,6 +782,8 @@
       <p>A T splits the water. Before you can win, cap one end or loop it back into the line. Caps that don't touch a pipe are ignored; a leaky cap in use has to be repaired. You can't cap your last open end.</p>
       <h3>Winning</h3>
       <p>When your line is long enough, leak-free, has no other open ends and its last pipe points left, the spout goes on automatically, pouring left and down.</p>
+      <h3>Playing well</h3>
+      <p>From thousands of self-play games: spring a leak whenever you can't build; fix leaks fast and spend your wrenches; treat T pieces as discards; keep cards that fit where your pipe is heading; and turn your pipe to point left before the end, budgeting a card or two for the turns. Stuck? Tap Hint to see what the Hard computer would do.</p>
       <h3>House rules in this app</h3>
       <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card deck here is an estimate.</p>
       <div class="row end"><button type="button" class="btn primary" data-act="rules-close" data-focus>Got it</button></div>

@@ -1,0 +1,2 @@
+A win rate 58.3% ± 8.8 (fair 50%) over 120 games, avg 74.3 turns, 0 draws, 217.5s
+A win rate 45.3% ± 11.3 (fair 33%) over 75 games, avg 85.1 turns, 1 draws, 191.7s

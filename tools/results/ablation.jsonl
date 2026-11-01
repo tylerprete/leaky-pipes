@@ -1,0 +1,12 @@
+{"label":"never springs leaks","players":2,"variantWinRate":24,"fair":50,"ci":4.8,"games":300}
+{"label":"never springs leaks","players":3,"variantWinRate":23.7,"fair":33.3,"ci":4.8,"games":300}
+{"label":"ignores whether its last card is copper","players":2,"variantWinRate":50,"fair":50,"ci":5.7,"games":300}
+{"label":"ignores whether its hand fits the pipeline","players":2,"variantWinRate":44.7,"fair":50,"ci":5.6,"games":300}
+{"label":"spends wrenches as if free","players":2,"variantWinRate":47.3,"fair":50,"ci":5.6,"games":300}
+{"label":"hoards wrenches","players":2,"variantWinRate":34,"fair":50,"ci":5.4,"games":300}
+{"label":"plays T pieces like any other pipe","players":2,"variantWinRate":31.7,"fair":50,"ci":5.3,"games":300}
+{"label":"attacks twice as eagerly","players":2,"variantWinRate":47.3,"fair":50,"ci":5.6,"games":300}
+{"label":"attacks twice as eagerly","players":3,"variantWinRate":34.7,"fair":33.3,"ci":5.4,"games":300}
+{"label":"attacks anyone, not just the leader","players":3,"variantWinRate":30,"fair":33.3,"ci":5.2,"games":300}
+{"label":"attacks anyone, not just the leader","players":4,"variantWinRate":26.3,"fair":25,"ci":5,"games":300}
+{"label":"ignores free space around its pipe","players":2,"variantWinRate":48.3,"fair":50,"ci":5.7,"games":300}

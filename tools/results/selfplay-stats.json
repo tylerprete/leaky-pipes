@@ -1,0 +1,239 @@
+[
+ {
+  "label": "tuned heuristic self-play",
+  "players": 2,
+  "games": 150,
+  "draws": 1,
+  "seatWinRates": [
+   "53.7%",
+   "46.3%"
+  ],
+  "avgRounds": "35.4",
+  "perPlayerPerGame": {
+   "builds": [
+    "9.8",
+    "8.1"
+   ],
+   "attacks": [
+    "6.39",
+    "6.86"
+   ],
+   "discards": [
+    "14.3",
+    "16.0"
+   ],
+   "leaksTaken": [
+    "6.86",
+    "6.39"
+   ],
+   "wrenchesUsed": [
+    "1.91",
+    "1.92"
+   ],
+   "covers": [
+    "4.95",
+    "3.91"
+   ],
+   "tPlayed": [
+    "0.40",
+    "0.46"
+   ],
+   "copperShareOfBuilds": [
+    "47.9%",
+    "48.1%"
+   ],
+   "finalLength": [
+    "13.5",
+    "10.6"
+   ],
+   "wrenchesLeftAtEnd": [
+    "0.09",
+    "0.08"
+   ]
+  },
+  "attackMix": {
+   "onTop": "22.6%",
+   "adjacent": "74.5%",
+   "leakyCap": "2.9%",
+   "onLeader": "100.0%",
+   "whenTargetWithin2": "26.3%"
+  },
+  "exposure": {
+   "ironEndTurnShare": "32.0%",
+   "onTopHitsPer100IronEndTurns": "46.1"
+  },
+  "repairs": {
+   "avgRoundsLeakStays": "2.65",
+   "byCover": "69.8%",
+   "byWrench": "30.2%"
+  },
+  "discardsByKind": {
+   "leaky": "24.1%",
+   "iron straight": "19.1%",
+   "good T": "18.0%",
+   "copper straight": "11.9%",
+   "iron elbow": "11.5%",
+   "cap": "9.7%",
+   "copper elbow": "5.7%"
+  }
+ },
+ {
+  "label": "tuned heuristic self-play",
+  "players": 3,
+  "games": 150,
+  "draws": 0,
+  "seatWinRates": [
+   "32.0%",
+   "26.0%",
+   "42.0%"
+  ],
+  "avgRounds": "27.8",
+  "perPlayerPerGame": {
+   "builds": [
+    "8.3",
+    "7.1"
+   ],
+   "attacks": [
+    "5.39",
+    "6.14"
+   ],
+   "discards": [
+    "9.6",
+    "10.9"
+   ],
+   "leaksTaken": [
+    "6.35",
+    "5.66"
+   ],
+   "wrenchesUsed": [
+    "1.83",
+    "1.83"
+   ],
+   "covers": [
+    "4.52",
+    "3.18"
+   ],
+   "tPlayed": [
+    "0.37",
+    "0.34"
+   ],
+   "copperShareOfBuilds": [
+    "48.7%",
+    "49.3%"
+   ],
+   "finalLength": [
+    "11.6",
+    "9.7"
+   ],
+   "wrenchesLeftAtEnd": [
+    "0.17",
+    "0.17"
+   ]
+  },
+  "attackMix": {
+   "onTop": "24.0%",
+   "adjacent": "72.9%",
+   "leakyCap": "3.1%",
+   "onLeader": "68.3%",
+   "whenTargetWithin2": "34.5%"
+  },
+  "exposure": {
+   "ironEndTurnShare": "31.7%",
+   "onTopHitsPer100IronEndTurns": "57.6"
+  },
+  "repairs": {
+   "avgRoundsLeakStays": "2.20",
+   "byCover": "66.4%",
+   "byWrench": "33.6%"
+  },
+  "discardsByKind": {
+   "good T": "23.2%",
+   "iron straight": "19.7%",
+   "leaky": "17.8%",
+   "cap": "12.2%",
+   "copper straight": "11.9%",
+   "iron elbow": "10.5%",
+   "copper elbow": "4.7%"
+  }
+ },
+ {
+  "label": "tuned heuristic self-play",
+  "players": 4,
+  "games": 150,
+  "draws": 2,
+  "seatWinRates": [
+   "24.3%",
+   "19.6%",
+   "23.0%",
+   "33.1%"
+  ],
+  "avgRounds": "18.5",
+  "perPlayerPerGame": {
+   "builds": [
+    "7.2",
+    "5.7"
+   ],
+   "attacks": [
+    "4.01",
+    "4.55"
+   ],
+   "discards": [
+    "4.4",
+    "5.7"
+   ],
+   "leaksTaken": [
+    "4.62",
+    "4.35"
+   ],
+   "wrenchesUsed": [
+    "1.64",
+    "1.65"
+   ],
+   "covers": [
+    "2.98",
+    "2.13"
+   ],
+   "tPlayed": [
+    "0.24",
+    "0.27"
+   ],
+   "copperShareOfBuilds": [
+    "52.4%",
+    "49.7%"
+   ],
+   "finalLength": [
+    "9.6",
+    "7.7"
+   ],
+   "wrenchesLeftAtEnd": [
+    "0.36",
+    "0.35"
+   ]
+  },
+  "attackMix": {
+   "onTop": "26.5%",
+   "adjacent": "69.9%",
+   "leakyCap": "3.6%",
+   "onLeader": "56.2%",
+   "whenTargetWithin2": "44.2%"
+  },
+  "exposure": {
+   "ironEndTurnShare": "29.6%",
+   "onTopHitsPer100IronEndTurns": "69.3"
+  },
+  "repairs": {
+   "avgRoundsLeakStays": "1.69",
+   "byCover": "58.7%",
+   "byWrench": "41.3%"
+  },
+  "discardsByKind": {
+   "good T": "26.0%",
+   "iron straight": "20.6%",
+   "leaky": "15.5%",
+   "cap": "14.4%",
+   "copper straight": "11.5%",
+   "iron elbow": "8.6%",
+   "copper elbow": "3.4%"
+  }
+ }
+]
