@@ -40,7 +40,10 @@
     dragOver: -1,
     suppressClick: false,
     bots: {},
+    since: {}, // per player: log seq right after their own last move
+    shownAt: new Map(), // log entry -> when it first appeared on screen
   };
+  const EVENT_SECS = 8; // how long an event line stays before fading out
 
   // ---------------------------------------------------------------- prefs
   try {
@@ -249,7 +252,7 @@
   // ---------------------------------------------------------------- persistence
   function save() {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ game: ui.game, seats: ui.seats, viewer: ui.viewer, level: ui.level }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ game: ui.game, seats: ui.seats, viewer: ui.viewer, level: ui.level, since: ui.since }));
     } catch (e) {
       /* storage unavailable: play on without saving */
     }
@@ -566,8 +569,28 @@
       const mine = g.players[g.turn].board;
       prompt = LP.leakAt(mine) >= 0 ? 'Your pipeline is leaking. Cover it with the same shape, use a wrench, or discard.' : `${humans() > 1 ? cur.name + ', your' : 'Your'} turn. Pick a card.`;
     }
-    const logs = g.log.slice(-2).reverse();
-    $('status').innerHTML = `<div class="prompt">${esc(prompt)}</div>` + logs.map((l) => `<div class="log ${l.kind}">${esc(l.text)}</div>`).join('');
+    // Event lines: what others did since this player's last move. Each fades out after a while.
+    const me = ui.viewer;
+    const from = ui.since[me] != null ? ui.since[me] : -1;
+    const now = performance.now();
+    let events = g.phase === 'over' ? g.log.slice(-1) : g.log.filter((l) => l.n > from && l.p !== me);
+    events = events.filter((l) => {
+      if (!ui.shownAt.has(l.n)) ui.shownAt.set(l.n, now);
+      return g.phase === 'over' || (now - ui.shownAt.get(l.n)) / 1000 < EVENT_SECS + 1;
+    });
+    const extra = Math.max(0, events.length - 3);
+    const lines = events
+      .slice(-3)
+      .reverse()
+      .map((l) => {
+        const left = EVENT_SECS - (now - ui.shownAt.get(l.n)) / 1000;
+        const keep = g.phase === 'over' ? ' keep' : '';
+        return `<div class="log ${l.kind}${keep}" style="animation-delay:${left.toFixed(2)}s">${esc(l.text)}</div>`;
+      });
+    if (extra) lines.push(`<div class="log more" style="animation-delay:${EVENT_SECS}s">+${extra} more · tap for the full log</div>`);
+    $('status').innerHTML = `<div class="prompt">${esc(prompt)}</div>` + lines.join('');
+    clearTimeout(ui.statusTimer);
+    if (events.length && g.phase !== 'over') ui.statusTimer = setTimeout(() => G() && renderStatus(), (EVENT_SECS + 1.2) * 1000);
   }
 
   function renderHand() {
@@ -804,6 +827,8 @@
     ui.modal = null;
     ui.hint = null;
     ui.vb = null;
+    ui.since = {};
+    ui.shownAt = new Map();
     const firstHuman = players.findIndex((p) => p.kind === 'human');
     ui.viewer = firstHuman;
     ui.view = firstHuman;
@@ -902,7 +927,8 @@
       return;
     }
     ui.lastActor = p;
-    if (m.type !== 'discard') {
+    ui.since[p] = g.seq;
+    if (m.type !== 'discard' && m.type !== 'pass') {
       const target = m.target != null ? m.target : p;
       ui.anim = { target, i: m.i };
       if (target !== p) sfx.leak();
@@ -1147,6 +1173,8 @@
         ui.demo = null;
         ui.seats = d.seats || ui.seats;
         ui.viewer = d.viewer || 0;
+        ui.since = d.since || {};
+        ui.shownAt = new Map();
         ui.view = ui.viewer;
         ui.modal = null;
         ui.vb = null;

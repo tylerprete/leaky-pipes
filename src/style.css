@@ -113,6 +113,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
 .status .log.attack { color: var(--danger); }
 .status .log.repair { color: var(--ok); }
 .status .log.win { color: var(--water); }
+.status .log { animation: logfade .8s ease forwards; }
+.status .log.keep { animation: none; }
+.status .log.more { font-style: italic; }
+@keyframes logfade { to { opacity: 0; } }
 
 /* hand */
 .hand { display: flex; gap: 8px; justify-content: center; align-items: flex-end; min-height: 88px; padding-top: 10px; }
