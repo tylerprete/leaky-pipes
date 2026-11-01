@@ -301,6 +301,7 @@
       return { ok: true };
     }
 
+    if (move.type === 'pass') return me.hand.length === 0 ? { ok: true } : fail('You still have cards to play or discard.');
     const card = me.hand.find((c) => c.id === move.cardId);
     if (!card) return fail("That card isn't in your hand.");
     if (move.type === 'discard') return { ok: true };
@@ -577,11 +578,16 @@
       log(game, who + ' discarded ' + an(describeCard(c)) + '.');
       return endTurn(game);
     }
+    if (move.type === 'pass') {
+      log(game, who + ' has no cards and passes.');
+      return endTurn(game);
+    }
     if (move.type === 'wrench') {
       me.board = boardAfter(me.board, move, null, p);
       me.wrenches--;
-      game.phase = 'wrenchDiscard';
       log(game, who + ' fixed a leak with a wrench.', 'repair');
+      if (!me.hand.length) return endTurn(game);
+      game.phase = 'wrenchDiscard';
       return { ok: true, needDiscard: true };
     }
     const card = removeFromHand(me, move.cardId);
@@ -672,6 +678,7 @@
       const leak = leakAt(me.board);
       if (leak >= 0) moves.push({ type: 'wrench', i: leak, target: p });
     }
+    if (!onlyCardId && !me.hand.length) moves.push({ type: 'pass' });
     return moves;
   }
 
