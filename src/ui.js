@@ -323,6 +323,7 @@
 
   // ---------------------------------------------------------------- rendering
   function render() {
+    if (!ui.drag) clearGhosts();
     if (!G()) {
       renderOverlay();
       return;
@@ -1068,10 +1069,25 @@
   }
 
   // ---------------------------------------------------------------- drag and drop from the hand
+  // The hand is never re-rendered mid-drag: on iPad Safari, removing the touched element stops its
+  // pointer events from reaching the document, which used to strand the floating card on screen.
+  // The pointer is also captured by <body> once a drag starts, and stray ghosts are swept up.
+  function renderDuringDrag() {
+    renderMeta();
+    renderChips();
+    renderBoard();
+    renderStatus();
+    renderActions();
+  }
+  function clearGhosts() {
+    document.querySelectorAll('.dragghost').forEach((el) => el.remove());
+    document.querySelectorAll('.hcard.lifted').forEach((el) => el.classList.remove('lifted'));
+  }
   document.addEventListener('pointerdown', (ev) => {
+    if (ui.drag) cancelDrag();
     const card = ev.target.closest && ev.target.closest('.hcard');
     if (!card || card.disabled || !isHumanTurn()) return;
-    ui.drag = { id: card.dataset.card, x: ev.clientX, y: ev.clientY, active: false, pid: ev.pointerId };
+    ui.drag = { id: card.dataset.card, x: ev.clientX, y: ev.clientY, active: false, pid: ev.pointerId, btn: card };
   });
   document.addEventListener('pointermove', (ev) => {
     const d = ui.drag;
@@ -1079,6 +1095,11 @@
     if (!d.active) {
       if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) < 10) return;
       d.active = true;
+      try {
+        document.body.setPointerCapture(d.pid);
+      } catch (e) {
+        /* capture unsupported: document listeners still work */
+      }
       if (ui.sel !== d.id) {
         ui.sel = d.id;
         if (G().phase === 'play') {
@@ -1086,13 +1107,16 @@
           if (ms.length && !ms.some((m) => m.target === ui.view)) ui.view = ms[0].target;
         }
       }
+      clearGhosts();
       const c = findCard(d.id);
       const gh = document.createElement('div');
       gh.className = 'dragghost';
       gh.innerHTML = cardSVG(c, !!ui.flips[d.id]);
       document.body.appendChild(gh);
       d.el = gh;
-      render();
+      document.querySelectorAll('.hcard.sel').forEach((el) => el.classList.remove('sel'));
+      if (d.btn) d.btn.classList.add('sel', 'lifted');
+      renderDuringDrag();
     }
     d.el.style.transform = `translate(${ev.clientX - 30}px, ${ev.clientY - 60}px) rotate(-4deg)`;
     const under = document.elementFromPoint(ev.clientX, ev.clientY);
@@ -1105,7 +1129,7 @@
       if (v !== ui.view) {
         ui.view = v;
         ui.dragOver = -1;
-        render();
+        renderDuringDrag();
         return;
       }
     }
@@ -1114,11 +1138,24 @@
       renderBoard();
     }
   });
-  function endDrag(ev) {
+  function cancelDrag() {
     const d = ui.drag;
     ui.drag = null;
+    ui.dragOver = -1;
+    clearGhosts();
+    if (d && d.active) render();
+  }
+  function endDrag(ev) {
+    const d = ui.drag;
+    if (d && ev.pointerId != null && ev.pointerId !== d.pid) return;
+    ui.drag = null;
+    clearGhosts();
     if (!d || !d.active) return;
-    if (d.el) d.el.remove();
+    try {
+      document.body.releasePointerCapture(d.pid);
+    } catch (e) {
+      /* already released */
+    }
     ui.suppressClick = true;
     setTimeout(() => (ui.suppressClick = false), 50);
     const over = ui.dragOver;
@@ -1128,6 +1165,11 @@
   }
   document.addEventListener('pointerup', endDrag);
   document.addEventListener('pointercancel', endDrag);
+  document.addEventListener('lostpointercapture', (ev) => {
+    if (ui.drag && ui.drag.active && ev.pointerId === ui.drag.pid) endDrag({ type: 'pointercancel', pointerId: ev.pointerId });
+  });
+  window.addEventListener('blur', () => ui.drag && cancelDrag());
+  document.addEventListener('visibilitychange', () => document.hidden && ui.drag && cancelDrag());
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
