@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
   await page.goto('file:///home/claude/leaky/docs/index.html');
   await page.waitForTimeout(300);
   await page.screenshot({ path: '/home/claude/leaky/shots/setup.png' });
+  if (process.env.TABLE === 'endless') await page.click('[data-table="endless"]');
   await page.click('[data-act="start"]');
   await page.waitForTimeout(500);
   await page.screenshot({ path: '/home/claude/leaky/shots/turn1.png' }); console.log('viewBox at start', await page.getAttribute('#board', 'viewBox'));

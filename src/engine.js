@@ -25,6 +25,8 @@
   const REQUIRED = { 2: 12, 3: 10, 4: 8 };
   const BOARD_W = 14;
   const BOARD_H = 7;
+  // Endless table: a grid big enough that no pipeline gets near its edge, valve in the middle.
+  const ENDLESS = 41;
 
   // Winning Moves doesn't publish the card mix. This is an estimate of the 110-card deck:
   // 4 valves + 4 spouts + 102 cards below. Edit freely.
@@ -102,11 +104,11 @@
   }
 
   // ---------- board ----------
-  function newBoard(owner, w, h) {
+  function newBoard(owner, w, h, valveX) {
     w = w || BOARD_W;
     h = h || BOARD_H;
     const cells = new Array(w * h).fill(null);
-    const valve = Math.floor(h / 2) * w + (w - 1);
+    const valve = Math.floor(h / 2) * w + (valveX != null ? valveX : w - 1);
     cells[valve] = { card: { id: 'valve' + owner, kind: 'valve' }, flip: false, repaired: false, wrench: false, under: [], by: owner };
     return { w, h, cells, valve, last: valve, owner, spout: -1 };
   }
@@ -118,6 +120,17 @@
     const y = Math.floor(i / b.w) + DY[d];
     if (x < 0 || y < 0 || x >= b.w || y >= b.h) return -1;
     return y * b.w + x;
+  }
+  // Which way may the last pipe point into the spout? Classic: left only (the spout pours left and
+  // down). Endless: away from the faucet, left or right. 'any' is kept for experiments.
+  function spoutDirOk(b, d, s) {
+    const rule = b.spoutRule || (b.spoutAny ? 'any' : 'west');
+    if (rule === 'any') return true;
+    if (rule === 'west') return d === 'W';
+    if (d !== 'W' && d !== 'E') return false;
+    const sx = s % b.w;
+    const vx = b.valve % b.w;
+    return d === 'W' ? sx <= vx : sx >= vx;
   }
   function pieceOpenings(p) {
     return openingsOf(p.card, p.flip);
@@ -414,7 +427,7 @@
     const ends = openEnds(b);
     if (ends.length !== 1) return -1;
     const e = ends[0];
-    if (e.d !== 'W' || e.t < 0) return -1;
+    if (e.t < 0 || !spoutDirOk(b, e.d, e.t)) return -1;
     if (longestPath(b, e.i) < required) return -1;
     return e.t;
   }
@@ -444,7 +457,8 @@
       const ok = pathSearch(b, E, needed, byTarget, opts.budget || 2500);
       if (!ok) continue;
       res.viable = true;
-      const turn = E.d === 'W' ? 0 : E.d === 'E' ? 2 : 1;
+      const rule = b.spoutRule || (b.spoutAny ? 'any' : 'west');
+      const turn = rule === 'any' ? 0 : rule === 'away' ? (E.d === 'W' || E.d === 'E' ? 0 : 1) : E.d === 'W' ? 0 : E.d === 'E' ? 2 : 1;
       const others = new Set(ends.filter((x) => x !== E && x.t !== E.t).map((x) => x.t));
       const cost = Math.max(needed, turn) + others.size;
       if (cost < res.cost) res.cost = cost;
@@ -457,7 +471,7 @@
     const othersAt = (i) => (byTarget.get(i) || []).filter((x) => x !== E);
     const spoutOk = (s, visited) => free(s) && !visited.has(s) && !byTarget.has(s);
     // Zero more cards: spout goes straight onto this end.
-    if (needed === 0 && E.d === 'W' && othersAt(E.t).length === 0) return true;
+    if (needed === 0 && spoutDirOk(b, E.d, E.t) && othersAt(E.t).length === 0) return true;
     const visited = new Set([E.t]);
     let nodes = 0;
     let exhausted = false;
@@ -488,8 +502,11 @@
         return true; // be optimistic when the search runs long
       }
       if (len >= needed) {
-        const s = step(b, cell, 'W');
-        if (inSide !== 'W' && spoutOk(s, visited)) return true;
+        for (const d of DIRS) {
+          if (d === inSide) continue;
+          const sc = step(b, cell, d);
+          if (spoutDirOk(b, d, sc) && spoutOk(sc, visited)) return true;
+        }
       }
       const remaining = needed - len;
       if (remaining > 0 && reach(cell, remaining + 1) < remaining + 1) return false;
@@ -513,10 +530,19 @@
     const specs = opts.players;
     const n = specs.length;
     if (n < 2 || n > 4) throw new Error('2–4 players');
+    const endless = opts.table === 'endless';
+    const bw = endless ? ENDLESS : opts.w;
+    const bh = endless ? ENDLESS : opts.h;
+    const vx = endless ? Math.floor(ENDLESS / 2) : undefined;
     const game = {
       v: 1,
+      table: endless ? 'endless' : 'classic',
       rng: (opts.seed >>> 0) || (Math.floor(Math.random() * 4294967296) >>> 0),
-      players: specs.map((s, i) => ({ name: s.name, kind: s.kind, hand: [], wrenches: 2, board: newBoard(i, opts.w, opts.h) })),
+      players: specs.map((s, i) => {
+        const board = newBoard(i, bw, bh, vx);
+        if (endless) board.spoutRule = opts.spoutRule || 'away';
+        return { name: s.name, kind: s.kind, hand: [], wrenches: 2, board };
+      }),
       deck: [],
       discard: [],
       turn: 0,
@@ -613,6 +639,7 @@
       const nb = cloneBoard(me.board);
       nb.cells[s] = { card: { id: 'spout' + p, kind: 'spout' }, flip: false, repaired: false, wrench: false, under: [], by: p };
       nb.spout = s;
+      nb.spoutDir = openEnds(me.board)[0].d;
       me.board = nb;
       game.winner = p;
       game.phase = 'over';
@@ -691,11 +718,11 @@
     if (!before.viable) return null;
     const after = analyze(boardAfter(me.board, move, card, p), game.required, { budget: 6000 });
     if (after.viable) return null;
-    return "After this move there's no way to finish your pipeline: it can't reach a spot where the spout pours left and down with enough cards.";
+    return "After this move there's no way to finish your pipeline: it can't reach a spot where the spout fits with enough cards.";
   }
 
   const api = {
-    DIRS, OPP, SHAPES, SHAPE_KIND, REQUIRED, DECK_SPEC, BOARD_W, BOARD_H,
+    DIRS, OPP, SHAPES, SHAPE_KIND, REQUIRED, DECK_SPEC, BOARD_W, BOARD_H, ENDLESS,
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,

@@ -27,6 +27,8 @@
     nonLeader: 0.45, // multiplier for hurting someone who isn't the leader (3–4 players)
     race: 0.25, // extra attack weight per turn the target is ahead of me
     tPenalty: 0.15,
+    west: 0, // pull toward a left-heading line near the finish (set per table below)
+    westWithin: 4,
     noise: 0,
   };
 
@@ -86,6 +88,12 @@
       if (last && last.card.kind === 'pipe' && last.card.mat === 'iron' && !last.repaired) v -= P.exposed;
       // room to grow
       if (cost < CAP) v += P.space * Math.log2(1 + Math.min(16, freeAround(b)));
+      // Near the finish, a line already heading left is easy to cap with the spout.
+      if (P.west && cost < CAP && cost <= P.westWithin) {
+        let head = -Infinity;
+        for (const e of LP.openEnds(b)) if (e.t >= 0) head = Math.max(head, e.d === 'W' ? 1 : e.d === 'E' ? -0.5 : 0.3);
+        if (head > -Infinity) v += P.west * head;
+      }
       // resources
       v += P.wrench * wrenches;
       const leaky = hand.filter((c) => c.kind === 'pipe' && c.mat === 'leaky').length;

@@ -316,4 +316,40 @@ test('win flow: completing the line places the spout and ends the game', () => {
   assert.strictEqual(g.players[0].board.spout, at(b, 0, 1));
 });
 
+test('endless table: valve in the middle, and you can build right of it after a turn', () => {
+  const g = LP.newGame({ players: [{ name: 'A', kind: 'human' }, { name: 'B', kind: 'human' }], seed: 5, table: 'endless' });
+  const b = g.players[0].board;
+  const c = Math.floor(LP.ENDLESS / 2);
+  assert.strictEqual(g.table, 'endless');
+  assert.strictEqual(b.valve, at(b, c, c));
+  put(b, c - 1, c, pipe('iron', 'L1')); // E,N: up from the valve
+  put(b, c - 1, c - 1, pipe('iron', 'L2'), true); // S,E: turn right
+  put(b, c, c - 1, pipe('iron', 'H')); // over the valve
+  const r = LP.evalPipe(b, at(b, c + 1, c - 1), pipe('iron', 'H'), false); // past the valve to the right
+  assert.ok(r.ok, r.reason);
+  assert.ok(LP.analyze(b, 12).viable);
+});
+
+test('endless spout points away from the valve: right of it heading right works, heading left does not', () => {
+  const g = LP.newGame({ players: [{ name: 'A', kind: 'human' }, { name: 'B', kind: 'human' }], seed: 6, table: 'endless' });
+  const b = g.players[0].board;
+  const c = Math.floor(LP.ENDLESS / 2);
+  put(b, c - 1, c, pipe('iron', 'L1')); // E,N
+  put(b, c - 1, c - 1, pipe('iron', 'L2'), true); // S,E
+  for (let x = c; x <= c + 3; x++) put(b, x, c - 1, pipe('iron', 'H')); // run right, past the valve
+  assert.strictEqual(LP.spoutCell(b, 6), at(b, c + 4, c - 1), 'heading right, right of the valve');
+  const b2 = LP.newBoard(0, LP.ENDLESS, LP.ENDLESS, c);
+  b2.spoutRule = 'away';
+  put(b2, c - 1, c, pipe('iron', 'L1')); // E,N
+  put(b2, c - 1, c - 1, pipe('iron', 'L2'), true); // S,E
+  put(b2, c, c - 1, pipe('iron', 'H'));
+  put(b2, c + 1, c - 1, pipe('iron', 'L2')); // W,N: up
+  put(b2, c + 1, c - 2, pipe('iron', 'L1'), true); // S,W: back left, still right of the valve column? no: ends at x=c
+  assert.strictEqual(LP.spoutCell(b2, 5), at(b2, c, c - 2), 'spout cell is in the valve column, left is allowed');
+  const classic = LP.newBoard(0, 6, 3);
+  put(classic, 4, 1, pipe('iron', 'H'));
+  put(classic, 3, 1, pipe('iron', 'L1')); // E,N heads up
+  assert.strictEqual(LP.spoutCell(classic, 2), -1, 'classic still needs a left-pointing line');
+});
+
 console.log(`\n${passed} passed`);

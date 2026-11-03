@@ -22,6 +22,7 @@
       { name: 'Rusty', kind: 'bot' },
     ],
     level: 'normal',
+    table: 'classic',
     sound: true,
     view: 0,
     viewer: 0,
@@ -50,12 +51,13 @@
     const pr = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (typeof pr.sound === 'boolean') ui.sound = pr.sound;
     if (pr.level) ui.level = pr.level;
+    if (pr.table) ui.table = pr.table;
   } catch (e) {
     /* no storage */
   }
   function savePrefs() {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level }));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table }));
     } catch (e) {
       /* no storage */
     }
@@ -219,7 +221,7 @@
     const c = piece.card;
     let s = face();
     if (c.kind === 'valve') return s + valveArt();
-    if (c.kind === 'spout') return s + spoutArt(opts.pouring);
+    if (c.kind === 'spout') return s + (opts.mirror ? `<g transform="translate(50 0) scale(-1 1)">${spoutArt(opts.pouring)}</g>` : spoutArt(opts.pouring));
     if (c.kind === 'cap') return s + capArt(c, piece.flip, opts.usedCaps) + (piece.wrench ? wrenchIcon() : '');
     const op = LP.openingsOf(c, piece.flip);
     const m = MAT[c.mat];
@@ -385,7 +387,12 @@
     });
     x0 = Math.max(0, x0 - 1); x1 = Math.min(b.w - 1, x1 + 1);
     y0 = Math.max(0, y0 - 1); y1 = Math.min(b.h - 1, y1 + 1);
-    const addCol = () => (x0 > 0 ? x0-- : x1++);
+    let flipCol = false;
+    const addCol = () => {
+      flipCol = !flipCol;
+      if ((flipCol && x0 > 0) || x1 >= b.w - 1) x0--;
+      else x1++;
+    };
     let flipRow = false;
     const addRow = () => {
       flipRow = !flipRow;
@@ -404,6 +411,7 @@
     return [x0 * (CW + GAP) - 5, y0 * (CH + GAP) - 5, s.w + 10, s.h + 10];
   }
   function setViewBox(svg, target) {
+    ui.vbTarget = target;
     const cur = ui.vb;
     const same = cur && cur.every((v, k) => Math.abs(v - target[k]) < 0.5);
     if (!cur || REDUCED || same || ui.vbView !== ui.view) {
@@ -429,7 +437,7 @@
   // Cells along the water's path from valve to spout (for the win animation).
   function waterPath(b) {
     if (b.spout < 0) return [];
-    const into = LP.step(b, b.spout, 'E');
+    const into = LP.step(b, b.spout, OPP[b.spoutDir || 'W']);
     const adj = (i) => {
       const p = b.cells[i];
       const out = [];
@@ -486,16 +494,28 @@
       if (lk >= 0) targets.set(lk, { move: null, solid: true });
     }
     const pos = (i) => [(i % b.w) * (CW + GAP), Math.floor(i / b.w) * (CH + GAP)];
+    // Only draw cells near what's on screen (the endless table is big).
+    const vbs = [ui.vb, ui.vbTarget].filter(Boolean);
+    const cx0 = Math.max(0, Math.floor(Math.min(...vbs.map((v) => v[0])) / (CW + GAP)) - 1);
+    const cy0 = Math.max(0, Math.floor(Math.min(...vbs.map((v) => v[1])) / (CH + GAP)) - 1);
+    const cx1 = Math.min(b.w - 1, Math.ceil(Math.max(...vbs.map((v) => v[0] + v[2])) / (CW + GAP)) + 1);
+    const cy1 = Math.min(b.h - 1, Math.ceil(Math.max(...vbs.map((v) => v[1] + v[3])) / (CH + GAP)) + 1);
+    const inView = (i) => {
+      const x = i % b.w;
+      const y = Math.floor(i / b.w);
+      return x >= cx0 && x <= cx1 && y >= cy0 && y <= cy1;
+    };
     const leak = LP.leakAt(b);
     const pouring = g.phase === 'over' && g.winner === ui.view;
     let out = `<rect class="tableedge" x="-3" y="-3" width="${W + 6}" height="${H + 6}" rx="7"/>`;
     for (let i = 0; i < b.cells.length; i++) {
+      if (!inView(i)) continue;
       const [x, y] = pos(i);
       const p = b.cells[i];
       if (p) {
         const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(b, i).map((u) => u.d)) : null;
         const pop = ui.anim && ui.anim.target === ui.view && ui.anim.i === i;
-        out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring })}</g></g>`;
+        out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && b.spoutDir === 'E' })}</g></g>`;
       } else {
         out += `<rect class="slot" x="${x + 1.5}" y="${y + 1.5}" width="${CW - 3}" height="${CH - 3}" rx="5"/>`;
       }
@@ -534,7 +554,7 @@
           return [x + 25, y + 35];
         });
         const [sx, sy] = pos(b.spout);
-        pts[pts.length - 1] = [sx + 23, sy + 50];
+        pts[pts.length - 1] = [sx + (b.spoutDir === 'E' ? 27 : 23), sy + 50];
         let len = 0;
         for (let k = 1; k < pts.length; k++) len += Math.abs(pts[k][0] - pts[k - 1][0]) + Math.abs(pts[k][1] - pts[k - 1][1]);
         const d = 'M' + pts.map((q) => q.join(',')).join(' L');
@@ -542,6 +562,7 @@
       }
     }
     for (let i = 0; i < b.cells.length; i++) {
+      if (!inView(i)) continue;
       const [x, y] = pos(i);
       out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
     }
@@ -698,6 +719,10 @@
       ${seats}
       <div class="row">${s.length < 4 ? '<button type="button" class="btn" data-act="add-seat">Add a player</button>' : ''}</div>
       ${hasBot ? `<div class="levelrow"><span>Computer skill</span><span class="seg" role="group" aria-label="Computer skill">${lv('easy', 'Easy', 'Makes casual mistakes')}${lv('normal', 'Normal', 'Solid, a little unpredictable')}${lv('hard', 'Hard', 'Its best self-play-tuned play')}</span></div>` : ''}
+      <div class="levelrow"><span>Table</span><span class="seg" role="group" aria-label="Table">
+        <button type="button" class="${ui.table !== 'endless' ? 'on' : ''}" data-table="classic" title="Valve at the table's right edge, spout pours left">Classic edge</button>
+        <button type="button" class="${ui.table === 'endless' ? 'on' : ''}" data-table="endless" title="No edges, valve in the middle">Endless</button></span></div>
+      <p class="muted">${ui.table === 'endless' ? 'Endless: no table edge, the valve sits in the middle, and the spout can pour left or right as long as it points away from your valve.' : 'Classic: the valve sits at the right edge of the table and the spout pours left, as in the rulebook.'}</p>
       <p class="muted">${s.length} players · ${need} pipe cards to win. For pass-and-play, give each person a seat and pass the device between turns.</p>
       ${hasHuman ? '' : '<p class="muted warn">Add at least one person.</p>'}
       <div class="row end">
@@ -796,7 +821,7 @@
       <h3>Your turn</h3>
       <p>You draw a card automatically. Then do one thing: add a good pipe (copper or iron) to your pipeline, put a leaky pipe or leaky cap on an opponent, repair a leak, or discard. You end with five cards.</p>
       <h3>Placing</h3>
-      <p>The valve sits on the right and you build leftward. Cards stay upright; tap a selected card again (or Turn) to spin it 180°. Pipes must line up on every side, nothing may point off the table, and no card may completely block a pipeline. Loops are fine as long as the pipeline can keep going.</p>
+      <p>On the classic table the valve sits at the right edge and you build leftward. Cards stay upright; tap a selected card again (or Turn) to spin it 180°. Pipes must line up on every side, nothing may point off the table, and no card may completely block a pipeline. Loops are fine as long as the pipeline can keep going.</p>
       <h3>Leaks</h3>
       <p>A leaky card goes next to the last card of an opponent's pipeline (marked with a copper corner), or on top of it if that card is iron and exactly the same shape. Copper never leaks. One leak per pipeline at a time, and a repaired pipe can't leak again.</p>
       <h3>Repairs</h3>
@@ -804,9 +829,11 @@
       <h3>T's and caps</h3>
       <p>A T splits the water. Before you can win, cap one end or loop it back into the line. Caps that don't touch a pipe are ignored; a leaky cap in use has to be repaired. You can't cap your last open end.</p>
       <h3>Winning</h3>
-      <p>When your line is long enough, leak-free, has no other open ends and its last pipe points left, the spout goes on automatically, pouring left and down.</p>
+      <p>When your line is long enough, leak-free, has no other open ends and its last pipe points left, the spout goes on automatically, pouring left and down. (On the endless table it can point left or right, as long as the spout points away from your valve.)</p>
       <h3>Playing well</h3>
       <p>From thousands of self-play games: spring a leak whenever you can't build; fix leaks fast and spend your wrenches; treat T pieces as discards; keep cards that fit where your pipe is heading; and turn your pipe to point left before the end, budgeting a card or two for the turns. Stuck? Tap Hint to see what the Hard computer would do.</p>
+      <h3>Endless table</h3>
+      <p>An optional mode with no table edge. The valve sits in the middle, so you can build in any direction, and the spout can pour left or right as long as it points away from your valve (the rulebook's "away and down from your faucet").</p>
       <h3>House rules in this app</h3>
       <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card deck here is an estimate.</p>
       <div class="row end"><button type="button" class="btn primary" data-act="rules-close" data-focus>Got it</button></div>
@@ -817,7 +844,7 @@
   function startGame(seats) {
     ui.gen++;
     const players = seats.map((s, i) => ({ name: (s.name || '').trim() || (s.kind === 'bot' ? BOT_NAMES[i % 3] : 'Player ' + (i + 1)), kind: s.kind }));
-    ui.game = LP.newGame({ players });
+    ui.game = LP.newGame({ players, table: ui.table });
     ui.game.level = ui.level;
     ui.demo = null;
     ui.sel = null;
@@ -1105,7 +1132,7 @@
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
     if (ui.suppressClick) return;
-    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level]');
+    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table]');
     if (!t) return;
     audio();
     if (t.dataset.i != null && t.closest('#board')) return tryCell(+t.dataset.i);
@@ -1114,6 +1141,12 @@
       return render();
     }
     if (t.dataset.card) return selectCard(t.dataset.card);
+    if (t.dataset.table) {
+      readSeatNames();
+      ui.table = t.dataset.table;
+      savePrefs();
+      return renderOverlay();
+    }
     if (t.dataset.level) {
       ui.level = t.dataset.level;
       savePrefs();

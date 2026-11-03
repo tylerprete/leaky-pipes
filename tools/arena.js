@@ -13,8 +13,8 @@ function makeBot(spec) {
   return B.makeBot(spec.params || {});
 }
 
-function playOne(LP, bots, seed, record) {
-  const g = LP.newGame({ players: bots.map((_, i) => ({ name: 'P' + i, kind: 'bot' })), seed });
+function playOne(LP, bots, seed, record, table) {
+  const g = LP.newGame({ players: bots.map((_, i) => ({ name: 'P' + i, kind: 'bot' })), seed, table });
   const rec = record ? [] : null;
   let guard = 0;
   while (g.phase !== 'over' && guard++ < 3000) {
@@ -54,12 +54,12 @@ function describeMove(g, p, m) {
 
 if (!isMainThread) {
   const LP = require('../src/engine.js');
-  const { specA, specB, players, jobs, record } = workerData;
+  const { specA, specB, players, jobs, record, table } = workerData;
   const out = [];
   for (const [seed, seatA] of jobs) {
     // fresh bot objects per game keep caches small
     const bots = Array.from({ length: players }, (_, i) => makeBot(i === seatA ? specA : specB));
-    const r = playOne(LP, bots, seed, record);
+    const r = playOne(LP, bots, seed, record, table);
     out.push({ seed, seatA, winner: r.winner, turns: r.turns, aWon: r.winner === seatA, rec: r.rec });
   }
   parentPort.postMessage(out);
@@ -73,7 +73,7 @@ function runMatch(specA, specB, players, seeds, opts) {
   const nW = Math.min(os.cpus().length, 4);
   const chunks = Array.from({ length: nW }, (_, i) => jobs.filter((_, j) => j % nW === i));
   return Promise.all(chunks.map((c) => new Promise((res, rej) => {
-    const w = new Worker(__filename, { workerData: { specA, specB, players, jobs: c, record: !!opts.record } });
+    const w = new Worker(__filename, { workerData: { specA, specB, players, jobs: c, record: !!opts.record, table: opts.table || process.env.TABLE } });
     w.on('message', res); w.on('error', rej);
   }))).then((parts) => {
     const all = parts.flat();
