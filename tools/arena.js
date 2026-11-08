@@ -14,7 +14,7 @@ function makeBot(spec) {
 }
 
 function playOne(LP, bots, seed, record, table) {
-  const g = LP.newGame({ players: bots.map((_, i) => ({ name: 'P' + i, kind: 'bot' })), seed, table });
+  const g = LP.newGame({ players: bots.map((_, i) => ({ name: 'P' + i, kind: 'bot' })), seed, table, deck: process.env.DECK, layout: process.env.LAYOUT });
   const rec = record ? [] : null;
   let guard = 0;
   while (g.phase !== 'over' && guard++ < 3000) {

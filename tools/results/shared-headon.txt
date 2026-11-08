@@ -1,0 +1,7 @@
+facing 18x9 (current)    closest avg 10.9, games where ends met (<=2) 0% | stuck 0.13 drought 1.5 p90 4 rounds 22.1 attacks 0.18 stall 0.000 spread 0.05
+headon 15x9              closest avg 7.9, games where ends met (<=2) 7% | stuck 0.14 drought 1.6 p90 4.5 rounds 22.3 attacks 0.18 stall 0.000 spread 0.07
+headon 17x9              closest avg 9.9, games where ends met (<=2) 0% | stuck 0.14 drought 1.6 p90 4.5 rounds 22.3 attacks 0.18 stall 0.000 spread 0.08
+offset1 15x9             closest avg 8.4, games where ends met (<=2) 7% | stuck 0.13 drought 1.4 p90 4 rounds 21.5 attacks 0.18 stall 0.000 spread 0.00
+headon 3p 17x11          closest avg 2.6, games where ends met (<=2) 47% | stuck 0.08 drought 0.5 p90 0.6666666666666666 rounds 16.6 attacks 0.20 stall 0.000 spread 0.15
+headon 4p 17x11          closest avg 2.0, games where ends met (<=2) 67% | stuck 0.07 drought 0.3 p90 0.5 rounds 12.1 attacks 0.19 stall 0.000 spread 0.13
+headon 4p 19x13          closest avg 3.0, games where ends met (<=2) 47% | stuck 0.06 drought 0.2 p90 0.5 rounds 12.0 attacks 0.19 stall 0.000 spread 0.15

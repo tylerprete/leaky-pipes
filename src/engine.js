@@ -43,6 +43,22 @@
     ],
   };
 
+  // A remix found by self-play (tools/deck-search.js, tools/rules-exp.js). Same idea as the
+  // original, tuned against long stretches where nobody can play: more elbows, very few T's,
+  // a few fewer leaks, and wrench cards that hand you a new wrench when you draw them.
+  const DECK_TUNED = {
+    iron: { V: 7, H: 7, L1: 12, L2: 12, T1: 1, T2: 1 },
+    copper: { V: 5, H: 5, L1: 10, L2: 10, T1: 1, T2: 1 },
+    leaky: { V: 5, H: 5, L1: 8, L2: 8, T1: 1, T2: 1 },
+    caps: [
+      { caps: { N: 'iron', E: 'iron', S: 'copper', W: 'iron' }, count: 5 },
+      { caps: { N: 'copper', E: 'iron', S: 'iron', W: 'copper' }, count: 4 },
+      { caps: { N: 'leaky', E: 'iron', S: 'copper', W: 'iron' }, count: 1 },
+    ],
+    wrenchCards: 6,
+  };
+  const DECKS = { classic: DECK_SPEC, tuned: DECK_TUNED };
+
   // ---------- random ----------
   function nextRand(game) {
     // mulberry32, state kept in the game so saved games stay reproducible
@@ -72,6 +88,8 @@
     for (const c of spec.caps) {
       for (let k = 0; k < c.count; k++) deck.push({ id: 'c' + n++, kind: 'cap', caps: Object.assign({}, c.caps) });
     }
+    // Optional wrench cards: drawing one hands you a wrench token straight away (see drawInto).
+    for (let k = 0; k < (spec.wrenchCards || 0); k++) deck.push({ id: 'c' + n++, kind: 'wrench' });
     return deck;
   }
 
@@ -80,8 +98,8 @@
       const base = SHAPES[card.shape];
       return flip ? base.map((d) => OPP[d]) : base.slice();
     }
-    if (card.kind === 'valve') return ['W'];
-    if (card.kind === 'spout') return ['E'];
+    if (card.kind === 'valve') return [flip ? 'E' : 'W'];
+    if (card.kind === 'spout') return [flip ? 'W' : 'E'];
     return [];
   }
   function capAt(card, flip, d) {
@@ -99,21 +117,79 @@
   function describeCard(card) {
     if (card.kind === 'cap') return capHasLeak(card) ? 'cap card (with a leaky cap)' : 'cap card';
     if (card.kind === 'valve') return 'valve';
+    if (card.kind === 'wrench') return 'wrench card';
     if (card.kind === 'spout') return 'spout';
     return card.mat + ' ' + SHAPE_KIND[card.shape];
   }
 
   // ---------- board ----------
-  function newBoard(owner, w, h, valveX) {
+  function newBoard(owner, w, h, valveX, valveY, face) {
     w = w || BOARD_W;
     h = h || BOARD_H;
     const cells = new Array(w * h).fill(null);
-    const valve = Math.floor(h / 2) * w + (valveX != null ? valveX : w - 1);
-    cells[valve] = { card: { id: 'valve' + owner, kind: 'valve' }, flip: false, repaired: false, wrench: false, under: [], by: owner };
+    const valve = (valveY != null ? valveY : Math.floor(h / 2)) * w + (valveX != null ? valveX : w - 1);
+    cells[valve] = { card: { id: 'valve' + owner, kind: 'valve' }, flip: face === 'E', repaired: false, wrench: false, under: [], by: owner };
     return { w, h, cells, valve, last: valve, owner, spout: -1 };
   }
   function cloneBoard(b) {
     return Object.assign({}, b, { cells: b.cells.slice() });
+  }
+
+  // ---------- shared table ----------
+  // On the shared table every pipeline lives on one grid. Each board keeps only its own cards;
+  // b.foreign marks cells holding someone else's card (owner + 1) and b.reserved marks empty cells
+  // that someone else's open end points into. Neither may be built on, and no opening may face
+  // another pipeline's card or point at a reserved cell.
+  const foreignAt = (b, n) => (b.foreign ? b.foreign[n] : 0);
+  const reservedAt = (b, n) => (b.reserved ? b.reserved[n] : 0);
+  function syncShared(game) {
+    if (game.table !== 'shared') return;
+    const P = game.players;
+    const size = P[0].board.cells.length;
+    const occ = P.map((pl) => pl.board.cells.map((c) => (c ? 1 : 0)));
+    const ends = P.map((pl) => openEnds(pl.board).filter((e) => e.t >= 0).map((e) => e.t));
+    P.forEach((pl, k) => {
+      const f = new Array(size).fill(0);
+      const r = new Array(size).fill(0);
+      P.forEach((q, j) => {
+        if (j === k) return;
+        for (let i = 0; i < size; i++) if (occ[j][i]) f[i] = j + 1;
+        for (const t of ends[j]) r[t] = j + 1;
+      });
+      pl.board = Object.assign({}, pl.board, { foreign: f, reserved: r });
+    });
+  }
+  // Board r as it would look if `piece` landed on cell i of someone else's pipeline (board ob).
+  function withForeignPiece(rb, ob, i, piece) {
+    const f = rb.foreign.slice();
+    const r = rb.reserved.slice();
+    f[i] = ob.owner + 1;
+    r[i] = 0;
+    for (const d of pieceOpenings(piece)) {
+      const n = step(ob, i, d);
+      if (n >= 0 && !ob.cells[n] && !foreignAt(ob, n)) r[n] = ob.owner + 1;
+    }
+    return Object.assign({}, rb, { foreign: f, reserved: r });
+  }
+  const STRAND_OTHER_MSG = "That would leave another pipeline with no way to finish.";
+  // On the shared table, a card may not wall off another pipeline completely.
+  function strandsOthers(game, t, move, card) {
+    if (game.table !== 'shared' || !['pipe', 'cap'].includes(move.type)) return -1;
+    const ob = game.players[t].board;
+    const piece = { card, flip: !!move.flip };
+    const x = move.i % ob.w;
+    const y = Math.floor(move.i / ob.w);
+    for (let r = 0; r < game.players.length; r++) {
+      if (r === t) continue;
+      const rb = game.players[r].board;
+      const ends = openEnds(rb).filter((e) => e.t >= 0);
+      const room = game.required - progressOf(rb) + 4;
+      const near = ends.some((e) => Math.abs((e.t % rb.w) - x) + Math.abs(Math.floor(e.t / rb.w) - y) <= room);
+      if (!near) continue;
+      if (!analyze(rb, game.required).viable) continue;
+      if (!analyze(withForeignPiece(rb, ob, move.i, piece), game.required, { budget: 3000 }).viable) return r;
+    }
+    return -1;
   }
   function step(b, i, d) {
     const x = (i % b.w) + DX[d];
@@ -130,6 +206,8 @@
     if (d !== 'W' && d !== 'E') return false;
     const sx = s % b.w;
     const vx = b.valve % b.w;
+    // 'cross' (shared table): pour away from your valve, on the far half of the table
+    if (rule === 'cross') return d === 'W' ? sx <= vx && sx < b.w / 2 - 0.5 : sx >= vx && sx > b.w / 2 - 0.5;
     return d === 'W' ? sx <= vx : sx >= vx;
   }
   function pieceOpenings(p) {
@@ -147,7 +225,7 @@
       if (!isPipeLike(p)) continue;
       for (const d of pieceOpenings(p)) {
         const n = step(b, i, d);
-        if (n < 0) ends.push({ i, d, t: -1 });
+        if (n < 0 || foreignAt(b, n)) ends.push({ i, d, t: -1 });
         else if (!b.cells[n]) ends.push({ i, d, t: n });
       }
     }
@@ -227,7 +305,7 @@
       best = Math.max(best, longestPath(b, e.i));
     }
     if (b.spout >= 0) {
-      const into = step(b, b.spout, 'E');
+      const into = step(b, b.spout, b.spoutDir === 'E' ? 'W' : 'E');
       best = Math.max(best, longestPath(b, into));
     }
     return best;
@@ -239,7 +317,8 @@
   }
 
   function evalPipe(b, i, card, flip) {
-    if (i < 0 || b.cells[i]) return fail('That spot is taken.');
+    if (i < 0 || b.cells[i] || foreignAt(b, i)) return fail('That spot is taken.');
+    if (reservedAt(b, i)) return fail("That spot is in front of another pipeline's open end.");
     const O = openingsOf(card, flip);
     const conns = [];
     for (const d of DIRS) {
@@ -249,8 +328,15 @@
         if (open) return fail("A pipe can't point off the edge of the table.");
         continue;
       }
+      if (foreignAt(b, n)) {
+        if (open) return fail("A pipe can't run into another pipeline.");
+        continue;
+      }
       const q = b.cells[n];
-      if (!q) continue;
+      if (!q) {
+        if (open && reservedAt(b, n)) return fail('That would point at a spot another pipeline needs.');
+        continue;
+      }
       if (q.card.kind === 'cap') {
         if (open) return fail("A pipe can't run into a cap card.");
         continue;
@@ -267,7 +353,8 @@
   }
 
   function evalCap(b, i, card, flip) {
-    if (i < 0 || b.cells[i]) return fail('That spot is taken.');
+    if (i < 0 || b.cells[i] || foreignAt(b, i)) return fail('That spot is taken.');
+    if (reservedAt(b, i)) return fail("That spot is in front of another pipeline's open end.");
     const used = [];
     for (const d of DIRS) {
       const n = step(b, i, d);
@@ -330,7 +417,9 @@
       if (own) {
         if (card.mat === 'leaky') return fail("You can't put a leaky pipe on your own pipeline.");
         if (leak >= 0) return fail('Repair your leak before adding to your pipeline.');
-        return evalPipe(b, move.i, card, move.flip);
+        const r = evalPipe(b, move.i, card, move.flip);
+        if (r.ok && strandsOthers(game, p, move, card) >= 0) return fail(STRAND_OTHER_MSG);
+        return r;
       }
       if (card.mat !== 'leaky') return fail("You can't play a good pipe on an opponent's pipeline.");
       if (leak >= 0) return fail('That pipeline already has a leak.');
@@ -339,6 +428,7 @@
       const atk = attackCells(b);
       if (!r.conns.some((c) => atk.has(c.n))) return fail('A leaky pipe must go next to the last card played.');
       if (strandsOpponent(game, b, move, card, p)) return fail(STRAND_MSG);
+      if (strandsOthers(game, move.target, move, card) >= 0) return fail(STRAND_OTHER_MSG);
       return r;
     }
 
@@ -353,6 +443,7 @@
           if (!leakyT) return fail('Repair your leak before adding to your pipeline.');
           if (!r.used.every((u) => u.n === leak && u.mat !== 'leaky')) return fail('Only a good cap on the leaky T is allowed until it is repaired.');
         }
+        if (strandsOthers(game, p, move, card) >= 0) return fail(STRAND_OTHER_MSG);
         return r;
       }
       if (leak >= 0) return fail('That pipeline already has a leak.');
@@ -360,6 +451,7 @@
       const atk = attackCells(b);
       if (!r.used.some((u) => atk.has(u.n))) return fail('A leaky cap must go next to the last card played.');
       if (strandsOpponent(game, b, move, card, p)) return fail(STRAND_MSG);
+      if (strandsOthers(game, move.target, move, card) >= 0) return fail(STRAND_OTHER_MSG);
       return r;
     }
 
@@ -427,7 +519,7 @@
     const ends = openEnds(b);
     if (ends.length !== 1) return -1;
     const e = ends[0];
-    if (e.t < 0 || !spoutDirOk(b, e.d, e.t)) return -1;
+    if (e.t < 0 || reservedAt(b, e.t) || !spoutDirOk(b, e.d, e.t)) return -1;
     if (longestPath(b, e.i) < required) return -1;
     return e.t;
   }
@@ -458,16 +550,23 @@
       if (!ok) continue;
       res.viable = true;
       const rule = b.spoutRule || (b.spoutAny ? 'any' : 'west');
-      const turn = rule === 'any' ? 0 : rule === 'away' ? (E.d === 'W' || E.d === 'E' ? 0 : 1) : E.d === 'W' ? 0 : E.d === 'E' ? 2 : 1;
+      const turn = rule === 'any' ? 0 : rule === 'away' || rule === 'cross' ? (E.d === 'W' || E.d === 'E' ? 0 : 1) : E.d === 'W' ? 0 : E.d === 'E' ? 2 : 1;
+      let reach = 0;
+      if (rule === 'cross') {
+        const tx = E.t % b.w;
+        const west = b.valve % b.w > b.w / 2;
+        const goal = west ? Math.ceil(b.w / 2 - 0.5) - 1 : Math.floor(b.w / 2 - 0.5) + 1;
+        reach = Math.max(0, west ? tx - goal : goal - tx);
+      }
       const others = new Set(ends.filter((x) => x !== E && x.t !== E.t).map((x) => x.t));
-      const cost = Math.max(needed, turn) + others.size;
+      const cost = Math.max(needed, turn, reach) + others.size;
       if (cost < res.cost) res.cost = cost;
     }
     return res;
   }
 
   function pathSearch(b, E, needed, byTarget, budget) {
-    const free = (i) => i >= 0 && !b.cells[i];
+    const free = (i) => i >= 0 && !b.cells[i] && !foreignAt(b, i) && !reservedAt(b, i);
     const othersAt = (i) => (byTarget.get(i) || []).filter((x) => x !== E);
     const spoutOk = (s, visited) => free(s) && !visited.has(s) && !byTarget.has(s);
     // Zero more cards: spout goes straight onto this end.
@@ -526,22 +625,64 @@
   }
 
   // ---------- game ----------
+  // Where the valves sit on the shared table. Valves on the right edge open left (W); valves on
+  // the left edge open right (E). Sizes give each pipeline room for its length plus a turn or two.
+  const LAYOUTS = {
+    // across the table from each other, offset so the lines run past each other
+    // Valves face each other across the table on (nearly) the same rows, so lines meet in the
+    // middle. Picked with self-play (tools/results/shared-*.txt): flow is as good as on separate
+    // tables, and in 3-4 player games the open ends come within two cells of each other in
+    // about half to two thirds of games. Wide, short tables also fit screens best.
+    facing: (n) => {
+      const w = n === 2 ? 15 : 17;
+      const h = n === 2 ? 9 : 11;
+      const rows = { 2: [[w - 1, 4, 'W'], [0, 4, 'E']], 3: [[w - 1, 3, 'W'], [0, 5, 'E'], [w - 1, 7, 'W']], 4: [[w - 1, 3, 'W'], [0, 3, 'E'], [w - 1, 7, 'W'], [0, 7, 'E']] }[n];
+      return { w, h, rows };
+    },
+    // everyone on the right edge, stacked, all building left: a crowded race
+    stacked: (n) => {
+      const w = 15;
+      const gap = n === 2 ? 5 : 4;
+      const h = gap * n + 3;
+      return { w, h, rows: Array.from({ length: n }, (_, i) => [w - 1, 2 + i * gap, 'W']) };
+    },
+    // valves back to back in the middle, building outward
+    center: (n) => {
+      const w = 27;
+      const h = n === 2 ? 11 : 15;
+      const c = (w - 1) / 2;
+      const rows = { 2: [[c, 5, 'W'], [c + 1, 5, 'E']], 3: [[c, 4, 'W'], [c + 1, 4, 'E'], [c, 10, 'W']], 4: [[c, 4, 'W'], [c + 1, 4, 'E'], [c, 10, 'W'], [c + 1, 10, 'E']] }[n];
+      return { w, h, rows };
+    },
+  };
+  const DEFAULT_LAYOUT = 'facing';
+  function sharedLayout(n, name) {
+    if (typeof name === 'object' && name) return name; // custom {w,h,valves}
+    const key = LAYOUTS[name] ? name : DEFAULT_LAYOUT;
+    const L = LAYOUTS[key](n);
+    return { name: key, w: L.w, h: L.h, valves: L.rows.map(([x, y, face]) => ({ x, y, face })) };
+  }
+
   function newGame(opts) {
     const specs = opts.players;
     const n = specs.length;
     if (n < 2 || n > 4) throw new Error('2–4 players');
     const endless = opts.table === 'endless';
-    const bw = endless ? ENDLESS : opts.w;
-    const bh = endless ? ENDLESS : opts.h;
+    const shared = opts.table === 'shared';
+    const lay = shared ? sharedLayout(n, opts.layout) : null;
+    const bw = endless ? ENDLESS : shared ? lay.w : opts.w;
+    const bh = endless ? ENDLESS : shared ? lay.h : opts.h;
     const vx = endless ? Math.floor(ENDLESS / 2) : undefined;
     const game = {
       v: 1,
-      table: endless ? 'endless' : 'classic',
+      table: endless ? 'endless' : shared ? 'shared' : 'classic',
+      layout: shared ? lay.name : undefined,
       rng: (opts.seed >>> 0) || (Math.floor(Math.random() * 4294967296) >>> 0),
       players: specs.map((s, i) => {
-        const board = newBoard(i, bw, bh, vx);
-        if (endless) board.spoutRule = opts.spoutRule || 'away';
-        return { name: s.name, kind: s.kind, hand: [], wrenches: 2, board };
+        const v = shared ? lay.valves[i] : null;
+        const board = shared ? newBoard(i, bw, bh, v.x, v.y, v.face) : newBoard(i, bw, bh, vx);
+        if (endless || shared) board.spoutRule = opts.spoutRule || 'away';
+        return { name: s.name, kind: s.kind, hand: [], wrenches: opts.wrenches != null ? opts.wrenches : 2, board };
       }),
       deck: [],
       discard: [],
@@ -554,10 +695,12 @@
       drawn: null,
       seq: 0,
     };
-    game.deck = shuffle(game, buildDeck(opts.deckSpec));
-    for (let k = 0; k < 5; k++) for (const pl of game.players) pl.hand.push(game.deck.pop());
+    syncShared(game);
+    game.deckName = opts.deckSpec ? 'custom' : DECKS[opts.deck] ? opts.deck : 'classic';
+    game.deck = shuffle(game, buildDeck(opts.deckSpec || DECKS[game.deckName]));
+    for (let k = 0; k < (opts.hand || 5); k++) for (const pl of game.players) drawInto(game, pl, true);
     game.turn = opts.first != null ? opts.first : 0;
-    startTurn(game);
+    startTurn(game, opts.firstDraw === false);
     return game;
   }
 
@@ -579,13 +722,33 @@
     return game.deck.pop() || null;
   }
 
-  function startTurn(game) {
+  const MAX_WRENCHES = 3;
+  // Draw into a hand. Wrench cards become wrench tokens on the spot (up to MAX_WRENCHES),
+  // go to the discard pile so they come round again, and you draw a replacement.
+  function drawInto(game, pl, quiet) {
+    for (let guard = 0; guard < 200; guard++) {
+      const c = drawCard(game);
+      if (!c) return null;
+      if (c.kind !== 'wrench') {
+        pl.hand.push(c);
+        return c;
+      }
+      game.discard.push(c);
+      if (pl.wrenches < MAX_WRENCHES) {
+        pl.wrenches++;
+        game.found = (game.found || 0) + 1;
+        if (!quiet) log(game, (pl.name === 'You' ? 'You' : pl.name) + ' found a wrench in the pile.', 'found');
+      }
+    }
+    return null;
+  }
+
+  function startTurn(game, noDraw) {
     const pl = game.players[game.turn];
     game.phase = 'play';
     game.turns++;
-    const c = drawCard(game);
+    const c = noDraw ? null : drawInto(game, pl);
     game.drawn = c ? c.id : null;
-    if (c) pl.hand.push(c);
   }
 
   function removeFromHand(pl, id) {
@@ -610,6 +773,7 @@
     }
     if (move.type === 'wrench') {
       me.board = boardAfter(me.board, move, null, p);
+      syncShared(game);
       me.wrenches--;
       log(game, who + ' fixed a leak with a wrench.', 'repair');
       if (!me.hand.length) return endTurn(game);
@@ -619,6 +783,7 @@
     const card = removeFromHand(me, move.cardId);
     const tp = game.players[move.target];
     tp.board = boardAfter(tp.board, move, card, p);
+    syncShared(game);
     const own = move.target === p;
     if (own) {
       if (move.type === 'cover') log(game, who + ' repaired a leak with ' + an(describeCard(card)) + '.', 'repair');
@@ -637,10 +802,12 @@
     const s = spoutCell(me.board, game.required);
     if (s >= 0) {
       const nb = cloneBoard(me.board);
-      nb.cells[s] = { card: { id: 'spout' + p, kind: 'spout' }, flip: false, repaired: false, wrench: false, under: [], by: p };
+      const dir = openEnds(me.board)[0].d;
+      nb.cells[s] = { card: { id: 'spout' + p, kind: 'spout' }, flip: dir === 'E', repaired: false, wrench: false, under: [], by: p };
       nb.spout = s;
-      nb.spoutDir = openEnds(me.board)[0].d;
+      nb.spoutDir = dir;
       me.board = nb;
+      syncShared(game);
       game.winner = p;
       game.phase = 'over';
       log(game, me.name + ' added the spout and ' + (me.name === 'You' ? 'win' : 'wins') + '!', 'win');
@@ -722,11 +889,11 @@
   }
 
   const api = {
-    DIRS, OPP, SHAPES, SHAPE_KIND, REQUIRED, DECK_SPEC, BOARD_W, BOARD_H, ENDLESS,
+    DIRS, OPP, SHAPES, SHAPE_KIND, REQUIRED, DECK_SPEC, DECK_TUNED, DECKS, BOARD_W, BOARD_H, ENDLESS,
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, LAYOUTS, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);

@@ -1,0 +1,11 @@
+table=classic   columns are 2p/3p/4p
+original deck                        score  -4.64  stuck 0.32/0.28/0.17  drought 4.9/3.3/1.0  p90 11/7/3  rounds 34/29/19  attacks 0.19/0.22/0.25  leads 1.3/1.8/1.6  close 2.8/1.5/1.1  stall 0.00/0.00/0.00  (6s)
+original + 3 wrench tokens each      score  -3.76  stuck 0.27/0.19/0.12  drought 5.2/1.6/0.7  p90 10/4/2  rounds 34/24/17  attacks 0.19/0.23/0.25  leads 1.3/1.7/1.6  close 2.8/1.6/1.2  stall 0.01/0.00/0.00  (7s)
+original + 4 wrench cards            score  -3.21  stuck 0.24/0.19/0.14  drought 3.3/1.4/0.7  p90 8/3/2  rounds 30/24/19  attacks 0.20/0.24/0.25  leads 1.3/1.8/1.6  close 2.9/1.7/1.2  stall 0.00/0.00/0.00  (7s)
+original + 8 wrench cards            score  -3.38  stuck 0.20/0.18/0.11  drought 3.8/1.2/1.2  p90 6/3/1  rounds 30/23/19  attacks 0.20/0.23/0.25  leads 1.1/1.7/1.4  close 2.9/1.7/1.6  stall 0.01/0.00/0.01  (7s)
+climbed (near-solitaire)             score  -1.25  stuck 0.11/0.10/0.06  drought 0.9/0.5/0.2  p90 3/1/1  rounds 16/13/9  attacks 0.09/0.11/0.10  leads 0.3/0.6/0.1  close 2.4/1.3/1.1  stall 0.00/0.00/0.00  (3s)
+balanced                             score  -1.61  stuck 0.17/0.13/0.06  drought 1.8/0.8/0.3  p90 4/2/1  rounds 21/16/12  attacks 0.15/0.17/0.18  leads 0.7/1.1/0.9  close 2.5/1.6/1.1  stall 0.00/0.00/0.00  (5s)
+balanced, hand 6                     score  -1.26  stuck 0.13/0.09/0.06  drought 1.3/0.5/0.4  p90 4/1/1  rounds 20/15/12  attacks 0.16/0.17/0.18  leads 0.6/1.0/1.0  close 2.3/1.5/1.2  stall 0.00/0.00/0.00  (5s)
+balanced + 4 wrench cards            score  -1.40  stuck 0.13/0.12/0.09  drought 1.2/0.7/0.3  p90 4/2/1  rounds 20/17/13  attacks 0.15/0.17/0.18  leads 0.6/0.9/0.9  close 2.5/1.5/1.0  stall 0.00/0.00/0.00  (5s)
+balanced + 6 wrench cards            score  -1.27  stuck 0.14/0.09/0.06  drought 1.4/0.4/0.3  p90 4/1/1  rounds 20/16/12  attacks 0.14/0.17/0.18  leads 0.7/0.9/0.8  close 2.4/1.4/1.2  stall 0.00/0.00/0.00  (4s)
+spicy (leaky .28) + 6 wrench cards   score  -1.64  stuck 0.17/0.11/0.08  drought 1.8/0.6/0.3  p90 5/1/1  rounds 22/17/14  attacks 0.17/0.20/0.21  leads 0.8/1.2/1.1  close 2.6/1.4/1.1  stall 0.00/0.00/0.00  (4s)

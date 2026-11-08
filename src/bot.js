@@ -27,6 +27,7 @@
     nonLeader: 0.45, // multiplier for hurting someone who isn't the leader (3–4 players)
     race: 0.25, // extra attack weight per turn the target is ahead of me
     tPenalty: 0.15,
+    block: 0, // shared table: weight on how much a placement crowds other pipelines (0 = ignore)
     west: 0, // pull toward a left-heading line near the finish (set per table below)
     westWithin: 4,
     noise: 0,
@@ -129,7 +130,7 @@
         const i = q.pop();
         for (const d of LP.DIRS) {
           const n = LP.step(b, i, d);
-          if (n < 0 || b.cells[n] || seen.has(n)) continue;
+          if (n < 0 || b.cells[n] || seen.has(n) || (b.foreign && (b.foreign[n] || b.reserved[n]))) continue;
           seen.add(n);
           q.push(n);
         }
@@ -187,16 +188,37 @@
           const nb = LP.boardAfter(me.board, m, card, p);
           let s = myValue(game, p, nb, without(m.cardId), me.wrenches) - base;
           if (LP.spoutCell(nb, game.required) >= 0) s += 100;
-          consider(m, s);
+          consider(m, s + crowding(game, p, m, card, myCostNow, costs, theirBase));
         } else {
           const tp = game.players[m.target];
           const nb = LP.boardAfter(tp.board, m, card, p);
           const lost = theirBase[m.target] - theirValue(game, m.target, nb);
           const mine = myValue(game, p, me.board, without(m.cardId), me.wrenches) - base;
-          consider(m, mine + attackWeight(game, p, m.target, myCostNow, costs) * lost);
+          consider(m, mine + attackWeight(game, p, m.target, myCostNow, costs) * lost + crowding(game, p, m, card, myCostNow, costs, theirBase));
         }
       }
       return scored;
+    }
+
+    // Shared table: a card on the grid also takes room from nearby pipelines.
+    function crowding(game, p, m, card, myCostNow, costs, theirBase) {
+      if (!P.block || game.table !== 'shared' || (m.type !== 'pipe' && m.type !== 'cap')) return 0;
+      const ob = game.players[m.target].board;
+      const x = m.i % ob.w;
+      const y = Math.floor(m.i / ob.w);
+      let total = 0;
+      game.players.forEach((pl, r) => {
+        if (r === p || r === m.target) return;
+        const rb = pl.board;
+        const near = LP.openEnds(rb).some((e) => e.t >= 0 && Math.abs((e.t % rb.w) - x) + Math.abs(Math.floor(e.t / rb.w) - y) <= 4);
+        if (!near) return;
+        const nb = LP.withForeignPiece(rb, ob, m.i, { card, flip: !!m.flip });
+        // the path-length estimate ignores detours, so measure lost elbow room too
+        const room = (b) => Math.log2(1 + Math.min(16, freeAround(b)));
+        const lost = theirBase[r] - theirValue(game, r, nb) + 2 * P.space * (room(rb) - room(nb));
+        if (lost > 0) total += P.block * attackWeight(game, p, r, myCostNow, costs) * lost;
+      });
+      return total;
     }
 
     function chooseMove(game, p) {
@@ -253,7 +275,15 @@
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
       g.players.forEach((pl, i) => {
-        if (i !== p) pl.hand = pool.splice(0, pl.hand.length);
+        if (i !== p) {
+          const len = pl.hand.length;
+          pl.hand = [];
+          while (pl.hand.length < len) {
+            const k = pool.findIndex((c) => c.kind !== 'wrench');
+            if (k < 0) break;
+            pl.hand.push(pool.splice(k, 1)[0]);
+          }
+        }
       });
       g.deck = pool;
       g.rng = (seed * 2654435761) >>> 0;

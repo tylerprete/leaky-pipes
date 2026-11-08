@@ -1,0 +1,11 @@
+2p cur 17x11  stuck 0.13 drought 1.4 p90 4 rounds 21.3 attacks 0.17 leads 0.7 stall 0.000 spread 0.06
+2p 18x9       stuck 0.14 drought 1.4 p90 4 rounds 20.9 attacks 0.17 leads 0.7 stall 0.000 spread 0.07
+2p 15x11      stuck 0.14 drought 1.4 p90 4 rounds 21.3 attacks 0.17 leads 0.7 stall 0.000 spread 0.06
+2p 20x10      stuck 0.14 drought 1.3 p90 4 rounds 21.1 attacks 0.17 leads 0.7 stall 0.000 spread 0.07
+3p cur 18x15  stuck 0.08 drought 0.6 p90 1 rounds 16.1 attacks 0.19 leads 1.0 stall 0.000 spread 0.11
+3p 20x12      stuck 0.09 drought 0.6 p90 1 rounds 16.0 attacks 0.19 leads 1.0 stall 0.000 spread 0.15
+3p 18x11      stuck 0.10 drought 0.7 p90 1 rounds 16.7 attacks 0.19 leads 1.1 stall 0.000 spread 0.15
+4p cur 18x17  stuck 0.05 drought 0.3 p90 1 rounds 11.9 attacks 0.19 leads 0.6 stall 0.000 spread 0.14
+4p 22x13      stuck 0.06 drought 0.3 p90 1 rounds 11.9 attacks 0.19 leads 0.6 stall 0.000 spread 0.12
+4p 20x12      stuck 0.07 drought 1.3 p90 1 rounds 12.9 attacks 0.19 leads 0.6 stall 0.007 spread 0.14
+4p 18x12      stuck 0.07 drought 1.3 p90 1 rounds 12.9 attacks 0.19 leads 0.6 stall 0.007 spread 0.14

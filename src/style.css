@@ -31,10 +31,22 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
   max-width: 1040px;
   margin: 0 auto;
   display: grid;
-  grid-template-rows: auto auto minmax(150px, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(150px, 1fr) auto auto auto;
+  grid-template-areas: "top" "board" "status" "hand" "actions";
   gap: 8px;
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
 }
+#app > .top { grid-area: top; }
+#app > .chips { grid-area: chips; }
+#app > .boardwrap { grid-area: board; }
+#app > .others { grid-area: others; }
+#app > .status { grid-area: status; }
+#app > .hand { grid-area: hand; }
+#app > .actions { grid-area: actions; }
+#app.with-chips { grid-template-rows: auto auto minmax(150px, 1fr) auto auto auto; grid-template-areas: "top" "chips" "board" "status" "hand" "actions"; }
+#app.with-others { grid-template-rows: auto minmax(130px, 1fr) auto auto auto auto; grid-template-areas: "top" "board" "others" "status" "hand" "actions"; }
+.chips[hidden], .others[hidden] { display: none !important; }
 
 /* header */
 .top { display: flex; align-items: center; gap: 12px; }
@@ -84,9 +96,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
 /* board */
 .boardwrap {
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   background: repeating-linear-gradient(90deg, rgba(255,255,255,.015) 0 2px, transparent 2px 46px), #1d272f;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -104,14 +115,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
 #board .lastmark { fill: var(--copper); pointer-events: none; }
 #board .boardlabel { fill: var(--muted); font: 600 15px var(--display); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes pulse { 50% { stroke-opacity: .45; fill-opacity: .5; } }
-.viewing-note { position: absolute; left: 12px; top: 10px; z-index: 1; background: rgba(26,35,42,.82); padding: 5px 8px; border-radius: 6px; font: 600 13px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+
 
 /* status */
 .status { min-height: 44px; display: grid; gap: 2px; align-content: center; }
 .status .prompt { font-weight: 600; }
 .status .log { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status .log.attack { color: var(--danger); }
-.status .log.repair { color: var(--ok); }
+.status .log.repair, .status .log.found { color: var(--ok); }
 .status .log.win { color: var(--water); }
 .status .log { animation: logfade .8s ease forwards; }
 .status .log.keep { animation: none; }
@@ -283,3 +294,91 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 .loglist .win { color: var(--water); font-weight: 600; }
 .actions .btn svg { flex: none; }
 @media (max-width: 420px) { .actions .btn { padding: 10px 9px; font-size: 14px; gap: 4px; } }
+
+/* ---------- all boards at once ---------- */
+.mainhead, .phead {
+  display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 22px;
+  font-size: 13px; color: var(--muted);
+}
+.mainhead { padding: 0 2px 6px; }
+.mainhead:empty { display: none; }
+.phead { padding: 0 2px 4px; font-size: 12px; }
+.mainhead .nm, .phead .nm { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.mainhead .nm { flex: none; }
+.mainhead .tags, .phead .tags { margin-left: auto; flex: none; }
+.tags .wr { align-items: center; font: 600 13px/1 var(--display); color: var(--ink); }
+.tags .wr.none { color: #66788a; }
+.tags .wr svg { margin-right: 1px; }
+.panel.mini { container-type: inline-size; }
+@container (max-width: 150px) {
+  .phead .bar, .phead .nm small, .phead .tag-leak span { display: none; }
+  .phead { gap: 5px; }
+}
+@container (max-width: 115px) {
+  .phead .wr { display: none; }
+}
+.mainhead .nm { font: 600 16px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.mainhead .nm small, .phead .nm small, .chip .nm small { font: 600 10px/1 var(--body); color: var(--muted); letter-spacing: .06em; margin-left: 4px; vertical-align: 1px; text-transform: none; }
+.mainhead .ct, .phead .ct { font: 600 15px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.mainhead .ct small, .phead .ct small { font-size: 12px; color: #6f8290; }
+.mainhead .bar, .phead .bar { flex: 1 1 0; max-width: 90px; min-width: 0; height: 4px; border-radius: 2px; background: #1b252d; overflow: hidden; }
+.mainhead .bar i, .phead .bar i { display: block; height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.2,.8,.2,1); }
+.mainhead .tags, .phead .tags { display: flex; gap: 6px; align-items: center; font-size: 11px; min-width: 0; overflow: hidden; }
+.mainhead .tags svg, .phead .tags svg { width: 13px; height: 13px; }
+.tags .wr { display: inline-flex; gap: 2px; color: var(--muted); }
+.tags .nowr { white-space: nowrap; }
+.tag-leak { color: var(--water); font-weight: 600; white-space: nowrap; }
+.tag-dead { color: var(--danger); font-weight: 600; white-space: nowrap; }
+.tag-win { color: var(--water); font-weight: 700; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.chip .dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.chip { grid-template-columns: auto 1fr auto; }
+.chip .nm { grid-column: 2; }
+.mainhead .ghost.tiny, .ghost.tiny { padding: 3px 8px; font-size: 12px; border-radius: 6px; margin-left: auto; }
+
+.others {
+  display: grid; gap: 8px; min-height: 0;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  height: clamp(112px, 21vh, 230px);
+}
+.panel.mini {
+  position: relative; min-width: 0; min-height: 0; padding: 6px 8px 6px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
+  text-align: left; cursor: pointer;
+  background: #1d272f; border: 1px solid var(--line); border-radius: 12px;
+  transition: border-color .2s, background .2s;
+}
+.panel.mini:hover { border-color: #5a7080; }
+.panel.mini.turn { border-color: rgba(58,160,230,.7); box-shadow: inset 0 0 0 1px rgba(58,160,230,.35); }
+.panel.mini.can-play::after {
+  content: ''; position: absolute; right: 8px; top: 8px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--water); box-shadow: 0 0 0 3px rgba(58,160,230,.25);
+}
+.panel.mini.flash { animation: flash 1s ease-out; }
+.panel.mini.dragover { border-color: var(--water); background: #223441; }
+.panel.mini .tags .nowr { display: none; }
+.minisvg { width: 100%; height: 100%; display: block; pointer-events: none; }
+.minisvg .tableedge { fill: none; stroke: rgba(255,255,255,.22); stroke-width: 3; }
+.minisvg .slot { fill: rgba(255,255,255,.02); stroke: none; }
+.minisvg .target { fill: rgba(58,160,230,.25); stroke: var(--water); stroke-width: 4; animation: pulse 1.4s ease-in-out infinite; }
+.minisvg .target.flipneed { stroke-dasharray: 8 5; fill: rgba(58,160,230,.1); }
+.minisvg .leakring { fill: none; stroke: var(--danger); stroke-width: 4; stroke-dasharray: 6 4; }
+.minisvg .lastmark { fill: var(--copper); }
+.minisvg .botmark { fill: none; stroke: var(--copper); stroke-width: 4; animation: fadeRing 2.4s ease-out forwards; }
+
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  #app.with-others {
+    max-width: 1360px;
+    grid-template-columns: minmax(0, 1fr) clamp(240px, 27vw, 380px);
+    grid-template-rows: auto minmax(150px, 1fr) auto auto auto;
+    grid-template-areas: "top top" "board others" "status status" "hand hand" "actions actions";
+  }
+  #app.with-others .others { height: auto; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr); grid-template-rows: repeat(var(--n, 1), minmax(0, 1fr)); }
+}
+.mainhead .following { font: 600 12px/1 var(--body); color: var(--ink); background: color-mix(in srgb, var(--pc) 30%, transparent); border: 1px solid var(--pc); padding: 3px 7px; border-radius: 99px; }
+@media (max-width: 560px) {
+  .chips .chip { min-width: 0; flex: 1 1 0; padding: 6px 8px; }
+  .chips .chip .nm { font-size: 13px; }
+  .chips .chip .nm small { display: none; }
+  .chips .chip .dot { margin-right: 4px; }
+}

@@ -41,10 +41,22 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
   max-width: 1040px;
   margin: 0 auto;
   display: grid;
-  grid-template-rows: auto auto minmax(150px, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(150px, 1fr) auto auto auto;
+  grid-template-areas: "top" "board" "status" "hand" "actions";
   gap: 8px;
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
 }
+#app > .top { grid-area: top; }
+#app > .chips { grid-area: chips; }
+#app > .boardwrap { grid-area: board; }
+#app > .others { grid-area: others; }
+#app > .status { grid-area: status; }
+#app > .hand { grid-area: hand; }
+#app > .actions { grid-area: actions; }
+#app.with-chips { grid-template-rows: auto auto minmax(150px, 1fr) auto auto auto; grid-template-areas: "top" "chips" "board" "status" "hand" "actions"; }
+#app.with-others { grid-template-rows: auto minmax(130px, 1fr) auto auto auto auto; grid-template-areas: "top" "board" "others" "status" "hand" "actions"; }
+.chips[hidden], .others[hidden] { display: none !important; }
 
 /* header */
 .top { display: flex; align-items: center; gap: 12px; }
@@ -94,9 +106,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
 /* board */
 .boardwrap {
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   background: repeating-linear-gradient(90deg, rgba(255,255,255,.015) 0 2px, transparent 2px 46px), #1d272f;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -114,14 +125,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--water); out
 #board .lastmark { fill: var(--copper); pointer-events: none; }
 #board .boardlabel { fill: var(--muted); font: 600 15px var(--display); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes pulse { 50% { stroke-opacity: .45; fill-opacity: .5; } }
-.viewing-note { position: absolute; left: 12px; top: 10px; z-index: 1; background: rgba(26,35,42,.82); padding: 5px 8px; border-radius: 6px; font: 600 13px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+
 
 /* status */
 .status { min-height: 44px; display: grid; gap: 2px; align-content: center; }
 .status .prompt { font-weight: 600; }
 .status .log { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status .log.attack { color: var(--danger); }
-.status .log.repair { color: var(--ok); }
+.status .log.repair, .status .log.found { color: var(--ok); }
 .status .log.win { color: var(--water); }
 .status .log { animation: logfade .8s ease forwards; }
 .status .log.keep { animation: none; }
@@ -294,6 +305,94 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 .actions .btn svg { flex: none; }
 @media (max-width: 420px) { .actions .btn { padding: 10px 9px; font-size: 14px; gap: 4px; } }
 
+/* ---------- all boards at once ---------- */
+.mainhead, .phead {
+  display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 22px;
+  font-size: 13px; color: var(--muted);
+}
+.mainhead { padding: 0 2px 6px; }
+.mainhead:empty { display: none; }
+.phead { padding: 0 2px 4px; font-size: 12px; }
+.mainhead .nm, .phead .nm { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.mainhead .nm { flex: none; }
+.mainhead .tags, .phead .tags { margin-left: auto; flex: none; }
+.tags .wr { align-items: center; font: 600 13px/1 var(--display); color: var(--ink); }
+.tags .wr.none { color: #66788a; }
+.tags .wr svg { margin-right: 1px; }
+.panel.mini { container-type: inline-size; }
+@container (max-width: 150px) {
+  .phead .bar, .phead .nm small, .phead .tag-leak span { display: none; }
+  .phead { gap: 5px; }
+}
+@container (max-width: 115px) {
+  .phead .wr { display: none; }
+}
+.mainhead .nm { font: 600 16px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.mainhead .nm small, .phead .nm small, .chip .nm small { font: 600 10px/1 var(--body); color: var(--muted); letter-spacing: .06em; margin-left: 4px; vertical-align: 1px; text-transform: none; }
+.mainhead .ct, .phead .ct { font: 600 15px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.mainhead .ct small, .phead .ct small { font-size: 12px; color: #6f8290; }
+.mainhead .bar, .phead .bar { flex: 1 1 0; max-width: 90px; min-width: 0; height: 4px; border-radius: 2px; background: #1b252d; overflow: hidden; }
+.mainhead .bar i, .phead .bar i { display: block; height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.2,.8,.2,1); }
+.mainhead .tags, .phead .tags { display: flex; gap: 6px; align-items: center; font-size: 11px; min-width: 0; overflow: hidden; }
+.mainhead .tags svg, .phead .tags svg { width: 13px; height: 13px; }
+.tags .wr { display: inline-flex; gap: 2px; color: var(--muted); }
+.tags .nowr { white-space: nowrap; }
+.tag-leak { color: var(--water); font-weight: 600; white-space: nowrap; }
+.tag-dead { color: var(--danger); font-weight: 600; white-space: nowrap; }
+.tag-win { color: var(--water); font-weight: 700; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.chip .dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.chip { grid-template-columns: auto 1fr auto; }
+.chip .nm { grid-column: 2; }
+.mainhead .ghost.tiny, .ghost.tiny { padding: 3px 8px; font-size: 12px; border-radius: 6px; margin-left: auto; }
+
+.others {
+  display: grid; gap: 8px; min-height: 0;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  height: clamp(112px, 21vh, 230px);
+}
+.panel.mini {
+  position: relative; min-width: 0; min-height: 0; padding: 6px 8px 6px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
+  text-align: left; cursor: pointer;
+  background: #1d272f; border: 1px solid var(--line); border-radius: 12px;
+  transition: border-color .2s, background .2s;
+}
+.panel.mini:hover { border-color: #5a7080; }
+.panel.mini.turn { border-color: rgba(58,160,230,.7); box-shadow: inset 0 0 0 1px rgba(58,160,230,.35); }
+.panel.mini.can-play::after {
+  content: ''; position: absolute; right: 8px; top: 8px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--water); box-shadow: 0 0 0 3px rgba(58,160,230,.25);
+}
+.panel.mini.flash { animation: flash 1s ease-out; }
+.panel.mini.dragover { border-color: var(--water); background: #223441; }
+.panel.mini .tags .nowr { display: none; }
+.minisvg { width: 100%; height: 100%; display: block; pointer-events: none; }
+.minisvg .tableedge { fill: none; stroke: rgba(255,255,255,.22); stroke-width: 3; }
+.minisvg .slot { fill: rgba(255,255,255,.02); stroke: none; }
+.minisvg .target { fill: rgba(58,160,230,.25); stroke: var(--water); stroke-width: 4; animation: pulse 1.4s ease-in-out infinite; }
+.minisvg .target.flipneed { stroke-dasharray: 8 5; fill: rgba(58,160,230,.1); }
+.minisvg .leakring { fill: none; stroke: var(--danger); stroke-width: 4; stroke-dasharray: 6 4; }
+.minisvg .lastmark { fill: var(--copper); }
+.minisvg .botmark { fill: none; stroke: var(--copper); stroke-width: 4; animation: fadeRing 2.4s ease-out forwards; }
+
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  #app.with-others {
+    max-width: 1360px;
+    grid-template-columns: minmax(0, 1fr) clamp(240px, 27vw, 380px);
+    grid-template-rows: auto minmax(150px, 1fr) auto auto auto;
+    grid-template-areas: "top top" "board others" "status status" "hand hand" "actions actions";
+  }
+  #app.with-others .others { height: auto; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr); grid-template-rows: repeat(var(--n, 1), minmax(0, 1fr)); }
+}
+.mainhead .following { font: 600 12px/1 var(--body); color: var(--ink); background: color-mix(in srgb, var(--pc) 30%, transparent); border: 1px solid var(--pc); padding: 3px 7px; border-radius: 99px; }
+@media (max-width: 560px) {
+  .chips .chip { min-width: 0; flex: 1 1 0; padding: 6px 8px; }
+  .chips .chip .nm { font-size: 13px; }
+  .chips .chip .nm small { display: none; }
+  .chips .chip .dot { margin-right: 4px; }
+}
+
 </style>
 </head>
 <body>
@@ -318,9 +417,10 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   </header>
   <nav class="chips" id="chips" aria-label="Pipelines"></nav>
   <main class="boardwrap" id="boardwrap">
-    <div class="viewing-note" id="viewnote"></div>
+    <div class="mainhead" id="mainhead"></div>
     <svg id="board" role="img" aria-label="Pipeline board"></svg>
   </main>
+  <section class="others" id="others" aria-label="Other pipelines" hidden></section>
   <div class="status" id="status" aria-live="polite"></div>
   <section class="hand" id="hand" aria-label="Your hand"></section>
   <div class="actions" id="actions"></div>
@@ -373,6 +473,22 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     ],
   };
 
+  // A remix found by self-play (tools/deck-search.js, tools/rules-exp.js). Same idea as the
+  // original, tuned against long stretches where nobody can play: more elbows, very few T's,
+  // a few fewer leaks, and wrench cards that hand you a new wrench when you draw them.
+  const DECK_TUNED = {
+    iron: { V: 7, H: 7, L1: 12, L2: 12, T1: 1, T2: 1 },
+    copper: { V: 5, H: 5, L1: 10, L2: 10, T1: 1, T2: 1 },
+    leaky: { V: 5, H: 5, L1: 8, L2: 8, T1: 1, T2: 1 },
+    caps: [
+      { caps: { N: 'iron', E: 'iron', S: 'copper', W: 'iron' }, count: 5 },
+      { caps: { N: 'copper', E: 'iron', S: 'iron', W: 'copper' }, count: 4 },
+      { caps: { N: 'leaky', E: 'iron', S: 'copper', W: 'iron' }, count: 1 },
+    ],
+    wrenchCards: 6,
+  };
+  const DECKS = { classic: DECK_SPEC, tuned: DECK_TUNED };
+
   // ---------- random ----------
   function nextRand(game) {
     // mulberry32, state kept in the game so saved games stay reproducible
@@ -402,6 +518,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     for (const c of spec.caps) {
       for (let k = 0; k < c.count; k++) deck.push({ id: 'c' + n++, kind: 'cap', caps: Object.assign({}, c.caps) });
     }
+    // Optional wrench cards: drawing one hands you a wrench token straight away (see drawInto).
+    for (let k = 0; k < (spec.wrenchCards || 0); k++) deck.push({ id: 'c' + n++, kind: 'wrench' });
     return deck;
   }
 
@@ -410,8 +528,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       const base = SHAPES[card.shape];
       return flip ? base.map((d) => OPP[d]) : base.slice();
     }
-    if (card.kind === 'valve') return ['W'];
-    if (card.kind === 'spout') return ['E'];
+    if (card.kind === 'valve') return [flip ? 'E' : 'W'];
+    if (card.kind === 'spout') return [flip ? 'W' : 'E'];
     return [];
   }
   function capAt(card, flip, d) {
@@ -429,21 +547,79 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   function describeCard(card) {
     if (card.kind === 'cap') return capHasLeak(card) ? 'cap card (with a leaky cap)' : 'cap card';
     if (card.kind === 'valve') return 'valve';
+    if (card.kind === 'wrench') return 'wrench card';
     if (card.kind === 'spout') return 'spout';
     return card.mat + ' ' + SHAPE_KIND[card.shape];
   }
 
   // ---------- board ----------
-  function newBoard(owner, w, h, valveX) {
+  function newBoard(owner, w, h, valveX, valveY, face) {
     w = w || BOARD_W;
     h = h || BOARD_H;
     const cells = new Array(w * h).fill(null);
-    const valve = Math.floor(h / 2) * w + (valveX != null ? valveX : w - 1);
-    cells[valve] = { card: { id: 'valve' + owner, kind: 'valve' }, flip: false, repaired: false, wrench: false, under: [], by: owner };
+    const valve = (valveY != null ? valveY : Math.floor(h / 2)) * w + (valveX != null ? valveX : w - 1);
+    cells[valve] = { card: { id: 'valve' + owner, kind: 'valve' }, flip: face === 'E', repaired: false, wrench: false, under: [], by: owner };
     return { w, h, cells, valve, last: valve, owner, spout: -1 };
   }
   function cloneBoard(b) {
     return Object.assign({}, b, { cells: b.cells.slice() });
+  }
+
+  // ---------- shared table ----------
+  // On the shared table every pipeline lives on one grid. Each board keeps only its own cards;
+  // b.foreign marks cells holding someone else's card (owner + 1) and b.reserved marks empty cells
+  // that someone else's open end points into. Neither may be built on, and no opening may face
+  // another pipeline's card or point at a reserved cell.
+  const foreignAt = (b, n) => (b.foreign ? b.foreign[n] : 0);
+  const reservedAt = (b, n) => (b.reserved ? b.reserved[n] : 0);
+  function syncShared(game) {
+    if (game.table !== 'shared') return;
+    const P = game.players;
+    const size = P[0].board.cells.length;
+    const occ = P.map((pl) => pl.board.cells.map((c) => (c ? 1 : 0)));
+    const ends = P.map((pl) => openEnds(pl.board).filter((e) => e.t >= 0).map((e) => e.t));
+    P.forEach((pl, k) => {
+      const f = new Array(size).fill(0);
+      const r = new Array(size).fill(0);
+      P.forEach((q, j) => {
+        if (j === k) return;
+        for (let i = 0; i < size; i++) if (occ[j][i]) f[i] = j + 1;
+        for (const t of ends[j]) r[t] = j + 1;
+      });
+      pl.board = Object.assign({}, pl.board, { foreign: f, reserved: r });
+    });
+  }
+  // Board r as it would look if `piece` landed on cell i of someone else's pipeline (board ob).
+  function withForeignPiece(rb, ob, i, piece) {
+    const f = rb.foreign.slice();
+    const r = rb.reserved.slice();
+    f[i] = ob.owner + 1;
+    r[i] = 0;
+    for (const d of pieceOpenings(piece)) {
+      const n = step(ob, i, d);
+      if (n >= 0 && !ob.cells[n] && !foreignAt(ob, n)) r[n] = ob.owner + 1;
+    }
+    return Object.assign({}, rb, { foreign: f, reserved: r });
+  }
+  const STRAND_OTHER_MSG = "That would leave another pipeline with no way to finish.";
+  // On the shared table, a card may not wall off another pipeline completely.
+  function strandsOthers(game, t, move, card) {
+    if (game.table !== 'shared' || !['pipe', 'cap'].includes(move.type)) return -1;
+    const ob = game.players[t].board;
+    const piece = { card, flip: !!move.flip };
+    const x = move.i % ob.w;
+    const y = Math.floor(move.i / ob.w);
+    for (let r = 0; r < game.players.length; r++) {
+      if (r === t) continue;
+      const rb = game.players[r].board;
+      const ends = openEnds(rb).filter((e) => e.t >= 0);
+      const room = game.required - progressOf(rb) + 4;
+      const near = ends.some((e) => Math.abs((e.t % rb.w) - x) + Math.abs(Math.floor(e.t / rb.w) - y) <= room);
+      if (!near) continue;
+      if (!analyze(rb, game.required).viable) continue;
+      if (!analyze(withForeignPiece(rb, ob, move.i, piece), game.required, { budget: 3000 }).viable) return r;
+    }
+    return -1;
   }
   function step(b, i, d) {
     const x = (i % b.w) + DX[d];
@@ -460,6 +636,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     if (d !== 'W' && d !== 'E') return false;
     const sx = s % b.w;
     const vx = b.valve % b.w;
+    // 'cross' (shared table): pour away from your valve, on the far half of the table
+    if (rule === 'cross') return d === 'W' ? sx <= vx && sx < b.w / 2 - 0.5 : sx >= vx && sx > b.w / 2 - 0.5;
     return d === 'W' ? sx <= vx : sx >= vx;
   }
   function pieceOpenings(p) {
@@ -477,7 +655,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       if (!isPipeLike(p)) continue;
       for (const d of pieceOpenings(p)) {
         const n = step(b, i, d);
-        if (n < 0) ends.push({ i, d, t: -1 });
+        if (n < 0 || foreignAt(b, n)) ends.push({ i, d, t: -1 });
         else if (!b.cells[n]) ends.push({ i, d, t: n });
       }
     }
@@ -557,7 +735,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       best = Math.max(best, longestPath(b, e.i));
     }
     if (b.spout >= 0) {
-      const into = step(b, b.spout, 'E');
+      const into = step(b, b.spout, b.spoutDir === 'E' ? 'W' : 'E');
       best = Math.max(best, longestPath(b, into));
     }
     return best;
@@ -569,7 +747,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   }
 
   function evalPipe(b, i, card, flip) {
-    if (i < 0 || b.cells[i]) return fail('That spot is taken.');
+    if (i < 0 || b.cells[i] || foreignAt(b, i)) return fail('That spot is taken.');
+    if (reservedAt(b, i)) return fail("That spot is in front of another pipeline's open end.");
     const O = openingsOf(card, flip);
     const conns = [];
     for (const d of DIRS) {
@@ -579,8 +758,15 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
         if (open) return fail("A pipe can't point off the edge of the table.");
         continue;
       }
+      if (foreignAt(b, n)) {
+        if (open) return fail("A pipe can't run into another pipeline.");
+        continue;
+      }
       const q = b.cells[n];
-      if (!q) continue;
+      if (!q) {
+        if (open && reservedAt(b, n)) return fail('That would point at a spot another pipeline needs.');
+        continue;
+      }
       if (q.card.kind === 'cap') {
         if (open) return fail("A pipe can't run into a cap card.");
         continue;
@@ -597,7 +783,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   }
 
   function evalCap(b, i, card, flip) {
-    if (i < 0 || b.cells[i]) return fail('That spot is taken.');
+    if (i < 0 || b.cells[i] || foreignAt(b, i)) return fail('That spot is taken.');
+    if (reservedAt(b, i)) return fail("That spot is in front of another pipeline's open end.");
     const used = [];
     for (const d of DIRS) {
       const n = step(b, i, d);
@@ -660,7 +847,9 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       if (own) {
         if (card.mat === 'leaky') return fail("You can't put a leaky pipe on your own pipeline.");
         if (leak >= 0) return fail('Repair your leak before adding to your pipeline.');
-        return evalPipe(b, move.i, card, move.flip);
+        const r = evalPipe(b, move.i, card, move.flip);
+        if (r.ok && strandsOthers(game, p, move, card) >= 0) return fail(STRAND_OTHER_MSG);
+        return r;
       }
       if (card.mat !== 'leaky') return fail("You can't play a good pipe on an opponent's pipeline.");
       if (leak >= 0) return fail('That pipeline already has a leak.');
@@ -669,6 +858,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       const atk = attackCells(b);
       if (!r.conns.some((c) => atk.has(c.n))) return fail('A leaky pipe must go next to the last card played.');
       if (strandsOpponent(game, b, move, card, p)) return fail(STRAND_MSG);
+      if (strandsOthers(game, move.target, move, card) >= 0) return fail(STRAND_OTHER_MSG);
       return r;
     }
 
@@ -683,6 +873,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
           if (!leakyT) return fail('Repair your leak before adding to your pipeline.');
           if (!r.used.every((u) => u.n === leak && u.mat !== 'leaky')) return fail('Only a good cap on the leaky T is allowed until it is repaired.');
         }
+        if (strandsOthers(game, p, move, card) >= 0) return fail(STRAND_OTHER_MSG);
         return r;
       }
       if (leak >= 0) return fail('That pipeline already has a leak.');
@@ -690,6 +881,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       const atk = attackCells(b);
       if (!r.used.some((u) => atk.has(u.n))) return fail('A leaky cap must go next to the last card played.');
       if (strandsOpponent(game, b, move, card, p)) return fail(STRAND_MSG);
+      if (strandsOthers(game, move.target, move, card) >= 0) return fail(STRAND_OTHER_MSG);
       return r;
     }
 
@@ -757,7 +949,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     const ends = openEnds(b);
     if (ends.length !== 1) return -1;
     const e = ends[0];
-    if (e.t < 0 || !spoutDirOk(b, e.d, e.t)) return -1;
+    if (e.t < 0 || reservedAt(b, e.t) || !spoutDirOk(b, e.d, e.t)) return -1;
     if (longestPath(b, e.i) < required) return -1;
     return e.t;
   }
@@ -788,16 +980,23 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       if (!ok) continue;
       res.viable = true;
       const rule = b.spoutRule || (b.spoutAny ? 'any' : 'west');
-      const turn = rule === 'any' ? 0 : rule === 'away' ? (E.d === 'W' || E.d === 'E' ? 0 : 1) : E.d === 'W' ? 0 : E.d === 'E' ? 2 : 1;
+      const turn = rule === 'any' ? 0 : rule === 'away' || rule === 'cross' ? (E.d === 'W' || E.d === 'E' ? 0 : 1) : E.d === 'W' ? 0 : E.d === 'E' ? 2 : 1;
+      let reach = 0;
+      if (rule === 'cross') {
+        const tx = E.t % b.w;
+        const west = b.valve % b.w > b.w / 2;
+        const goal = west ? Math.ceil(b.w / 2 - 0.5) - 1 : Math.floor(b.w / 2 - 0.5) + 1;
+        reach = Math.max(0, west ? tx - goal : goal - tx);
+      }
       const others = new Set(ends.filter((x) => x !== E && x.t !== E.t).map((x) => x.t));
-      const cost = Math.max(needed, turn) + others.size;
+      const cost = Math.max(needed, turn, reach) + others.size;
       if (cost < res.cost) res.cost = cost;
     }
     return res;
   }
 
   function pathSearch(b, E, needed, byTarget, budget) {
-    const free = (i) => i >= 0 && !b.cells[i];
+    const free = (i) => i >= 0 && !b.cells[i] && !foreignAt(b, i) && !reservedAt(b, i);
     const othersAt = (i) => (byTarget.get(i) || []).filter((x) => x !== E);
     const spoutOk = (s, visited) => free(s) && !visited.has(s) && !byTarget.has(s);
     // Zero more cards: spout goes straight onto this end.
@@ -856,22 +1055,64 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   }
 
   // ---------- game ----------
+  // Where the valves sit on the shared table. Valves on the right edge open left (W); valves on
+  // the left edge open right (E). Sizes give each pipeline room for its length plus a turn or two.
+  const LAYOUTS = {
+    // across the table from each other, offset so the lines run past each other
+    // Valves face each other across the table on (nearly) the same rows, so lines meet in the
+    // middle. Picked with self-play (tools/results/shared-*.txt): flow is as good as on separate
+    // tables, and in 3-4 player games the open ends come within two cells of each other in
+    // about half to two thirds of games. Wide, short tables also fit screens best.
+    facing: (n) => {
+      const w = n === 2 ? 15 : 17;
+      const h = n === 2 ? 9 : 11;
+      const rows = { 2: [[w - 1, 4, 'W'], [0, 4, 'E']], 3: [[w - 1, 3, 'W'], [0, 5, 'E'], [w - 1, 7, 'W']], 4: [[w - 1, 3, 'W'], [0, 3, 'E'], [w - 1, 7, 'W'], [0, 7, 'E']] }[n];
+      return { w, h, rows };
+    },
+    // everyone on the right edge, stacked, all building left: a crowded race
+    stacked: (n) => {
+      const w = 15;
+      const gap = n === 2 ? 5 : 4;
+      const h = gap * n + 3;
+      return { w, h, rows: Array.from({ length: n }, (_, i) => [w - 1, 2 + i * gap, 'W']) };
+    },
+    // valves back to back in the middle, building outward
+    center: (n) => {
+      const w = 27;
+      const h = n === 2 ? 11 : 15;
+      const c = (w - 1) / 2;
+      const rows = { 2: [[c, 5, 'W'], [c + 1, 5, 'E']], 3: [[c, 4, 'W'], [c + 1, 4, 'E'], [c, 10, 'W']], 4: [[c, 4, 'W'], [c + 1, 4, 'E'], [c, 10, 'W'], [c + 1, 10, 'E']] }[n];
+      return { w, h, rows };
+    },
+  };
+  const DEFAULT_LAYOUT = 'facing';
+  function sharedLayout(n, name) {
+    if (typeof name === 'object' && name) return name; // custom {w,h,valves}
+    const key = LAYOUTS[name] ? name : DEFAULT_LAYOUT;
+    const L = LAYOUTS[key](n);
+    return { name: key, w: L.w, h: L.h, valves: L.rows.map(([x, y, face]) => ({ x, y, face })) };
+  }
+
   function newGame(opts) {
     const specs = opts.players;
     const n = specs.length;
     if (n < 2 || n > 4) throw new Error('2–4 players');
     const endless = opts.table === 'endless';
-    const bw = endless ? ENDLESS : opts.w;
-    const bh = endless ? ENDLESS : opts.h;
+    const shared = opts.table === 'shared';
+    const lay = shared ? sharedLayout(n, opts.layout) : null;
+    const bw = endless ? ENDLESS : shared ? lay.w : opts.w;
+    const bh = endless ? ENDLESS : shared ? lay.h : opts.h;
     const vx = endless ? Math.floor(ENDLESS / 2) : undefined;
     const game = {
       v: 1,
-      table: endless ? 'endless' : 'classic',
+      table: endless ? 'endless' : shared ? 'shared' : 'classic',
+      layout: shared ? lay.name : undefined,
       rng: (opts.seed >>> 0) || (Math.floor(Math.random() * 4294967296) >>> 0),
       players: specs.map((s, i) => {
-        const board = newBoard(i, bw, bh, vx);
-        if (endless) board.spoutRule = opts.spoutRule || 'away';
-        return { name: s.name, kind: s.kind, hand: [], wrenches: 2, board };
+        const v = shared ? lay.valves[i] : null;
+        const board = shared ? newBoard(i, bw, bh, v.x, v.y, v.face) : newBoard(i, bw, bh, vx);
+        if (endless || shared) board.spoutRule = opts.spoutRule || 'away';
+        return { name: s.name, kind: s.kind, hand: [], wrenches: opts.wrenches != null ? opts.wrenches : 2, board };
       }),
       deck: [],
       discard: [],
@@ -884,10 +1125,12 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       drawn: null,
       seq: 0,
     };
-    game.deck = shuffle(game, buildDeck(opts.deckSpec));
-    for (let k = 0; k < 5; k++) for (const pl of game.players) pl.hand.push(game.deck.pop());
+    syncShared(game);
+    game.deckName = opts.deckSpec ? 'custom' : DECKS[opts.deck] ? opts.deck : 'classic';
+    game.deck = shuffle(game, buildDeck(opts.deckSpec || DECKS[game.deckName]));
+    for (let k = 0; k < (opts.hand || 5); k++) for (const pl of game.players) drawInto(game, pl, true);
     game.turn = opts.first != null ? opts.first : 0;
-    startTurn(game);
+    startTurn(game, opts.firstDraw === false);
     return game;
   }
 
@@ -909,13 +1152,33 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     return game.deck.pop() || null;
   }
 
-  function startTurn(game) {
+  const MAX_WRENCHES = 3;
+  // Draw into a hand. Wrench cards become wrench tokens on the spot (up to MAX_WRENCHES),
+  // go to the discard pile so they come round again, and you draw a replacement.
+  function drawInto(game, pl, quiet) {
+    for (let guard = 0; guard < 200; guard++) {
+      const c = drawCard(game);
+      if (!c) return null;
+      if (c.kind !== 'wrench') {
+        pl.hand.push(c);
+        return c;
+      }
+      game.discard.push(c);
+      if (pl.wrenches < MAX_WRENCHES) {
+        pl.wrenches++;
+        game.found = (game.found || 0) + 1;
+        if (!quiet) log(game, (pl.name === 'You' ? 'You' : pl.name) + ' found a wrench in the pile.', 'found');
+      }
+    }
+    return null;
+  }
+
+  function startTurn(game, noDraw) {
     const pl = game.players[game.turn];
     game.phase = 'play';
     game.turns++;
-    const c = drawCard(game);
+    const c = noDraw ? null : drawInto(game, pl);
     game.drawn = c ? c.id : null;
-    if (c) pl.hand.push(c);
   }
 
   function removeFromHand(pl, id) {
@@ -940,6 +1203,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     }
     if (move.type === 'wrench') {
       me.board = boardAfter(me.board, move, null, p);
+      syncShared(game);
       me.wrenches--;
       log(game, who + ' fixed a leak with a wrench.', 'repair');
       if (!me.hand.length) return endTurn(game);
@@ -949,6 +1213,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     const card = removeFromHand(me, move.cardId);
     const tp = game.players[move.target];
     tp.board = boardAfter(tp.board, move, card, p);
+    syncShared(game);
     const own = move.target === p;
     if (own) {
       if (move.type === 'cover') log(game, who + ' repaired a leak with ' + an(describeCard(card)) + '.', 'repair');
@@ -967,10 +1232,12 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     const s = spoutCell(me.board, game.required);
     if (s >= 0) {
       const nb = cloneBoard(me.board);
-      nb.cells[s] = { card: { id: 'spout' + p, kind: 'spout' }, flip: false, repaired: false, wrench: false, under: [], by: p };
+      const dir = openEnds(me.board)[0].d;
+      nb.cells[s] = { card: { id: 'spout' + p, kind: 'spout' }, flip: dir === 'E', repaired: false, wrench: false, under: [], by: p };
       nb.spout = s;
-      nb.spoutDir = openEnds(me.board)[0].d;
+      nb.spoutDir = dir;
       me.board = nb;
+      syncShared(game);
       game.winner = p;
       game.phase = 'over';
       log(game, me.name + ' added the spout and ' + (me.name === 'You' ? 'win' : 'wins') + '!', 'win');
@@ -1052,11 +1319,11 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   }
 
   const api = {
-    DIRS, OPP, SHAPES, SHAPE_KIND, REQUIRED, DECK_SPEC, BOARD_W, BOARD_H, ENDLESS,
+    DIRS, OPP, SHAPES, SHAPE_KIND, REQUIRED, DECK_SPEC, DECK_TUNED, DECKS, BOARD_W, BOARD_H, ENDLESS,
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, LAYOUTS, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);
@@ -1093,6 +1360,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     nonLeader: 0.45, // multiplier for hurting someone who isn't the leader (3–4 players)
     race: 0.25, // extra attack weight per turn the target is ahead of me
     tPenalty: 0.15,
+    block: 0, // shared table: weight on how much a placement crowds other pipelines (0 = ignore)
     west: 0, // pull toward a left-heading line near the finish (set per table below)
     westWithin: 4,
     noise: 0,
@@ -1195,7 +1463,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
         const i = q.pop();
         for (const d of LP.DIRS) {
           const n = LP.step(b, i, d);
-          if (n < 0 || b.cells[n] || seen.has(n)) continue;
+          if (n < 0 || b.cells[n] || seen.has(n) || (b.foreign && (b.foreign[n] || b.reserved[n]))) continue;
           seen.add(n);
           q.push(n);
         }
@@ -1253,16 +1521,37 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
           const nb = LP.boardAfter(me.board, m, card, p);
           let s = myValue(game, p, nb, without(m.cardId), me.wrenches) - base;
           if (LP.spoutCell(nb, game.required) >= 0) s += 100;
-          consider(m, s);
+          consider(m, s + crowding(game, p, m, card, myCostNow, costs, theirBase));
         } else {
           const tp = game.players[m.target];
           const nb = LP.boardAfter(tp.board, m, card, p);
           const lost = theirBase[m.target] - theirValue(game, m.target, nb);
           const mine = myValue(game, p, me.board, without(m.cardId), me.wrenches) - base;
-          consider(m, mine + attackWeight(game, p, m.target, myCostNow, costs) * lost);
+          consider(m, mine + attackWeight(game, p, m.target, myCostNow, costs) * lost + crowding(game, p, m, card, myCostNow, costs, theirBase));
         }
       }
       return scored;
+    }
+
+    // Shared table: a card on the grid also takes room from nearby pipelines.
+    function crowding(game, p, m, card, myCostNow, costs, theirBase) {
+      if (!P.block || game.table !== 'shared' || (m.type !== 'pipe' && m.type !== 'cap')) return 0;
+      const ob = game.players[m.target].board;
+      const x = m.i % ob.w;
+      const y = Math.floor(m.i / ob.w);
+      let total = 0;
+      game.players.forEach((pl, r) => {
+        if (r === p || r === m.target) return;
+        const rb = pl.board;
+        const near = LP.openEnds(rb).some((e) => e.t >= 0 && Math.abs((e.t % rb.w) - x) + Math.abs(Math.floor(e.t / rb.w) - y) <= 4);
+        if (!near) return;
+        const nb = LP.withForeignPiece(rb, ob, m.i, { card, flip: !!m.flip });
+        // the path-length estimate ignores detours, so measure lost elbow room too
+        const room = (b) => Math.log2(1 + Math.min(16, freeAround(b)));
+        const lost = theirBase[r] - theirValue(game, r, nb) + 2 * P.space * (room(rb) - room(nb));
+        if (lost > 0) total += P.block * attackWeight(game, p, r, myCostNow, costs) * lost;
+      });
+      return total;
     }
 
     function chooseMove(game, p) {
@@ -1319,7 +1608,15 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
       g.players.forEach((pl, i) => {
-        if (i !== p) pl.hand = pool.splice(0, pl.hand.length);
+        if (i !== p) {
+          const len = pl.hand.length;
+          pl.hand = [];
+          while (pl.hand.length < len) {
+            const k = pool.findIndex((c) => c.kind !== 'wrench');
+            if (k < 0) break;
+            pl.hand.push(pool.splice(k, 1)[0]);
+          }
+        }
       });
       g.deck = pool;
       g.rng = (seed * 2654435761) >>> 0;
@@ -1440,6 +1737,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     ],
     level: 'normal',
     table: 'classic',
+    deck: 'tuned',
     sound: true,
     view: 0,
     viewer: 0,
@@ -1469,12 +1767,13 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     if (typeof pr.sound === 'boolean') ui.sound = pr.sound;
     if (pr.level) ui.level = pr.level;
     if (pr.table) ui.table = pr.table;
+    if (pr.deck) ui.deck = pr.deck;
   } catch (e) {
     /* no storage */
   }
   function savePrefs() {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table }));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table, deck: ui.deck }));
     } catch (e) {
       /* no storage */
     }
@@ -1633,12 +1932,21 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       water
     );
   }
+  const MIRROR = (inner) => `<g transform="translate(50 0) scale(-1 1)">${inner}</g>`;
+  function tintMark(color) {
+    // owner color on the shared table: a colored frame and corner tab
+    return `<rect x="1" y="1" width="48" height="68" rx="5" fill="none" stroke="${color}" stroke-width="2.6" opacity=".9"/><path d="M1,14 V6 Q1,1 6,1 H14 Z" fill="${color}"/>`;
+  }
   function cardArt(piece, opts) {
     opts = opts || {};
+    const s = cardArtInner(piece, opts);
+    return opts.tint ? s + tintMark(opts.tint) : s;
+  }
+  function cardArtInner(piece, opts) {
     const c = piece.card;
     let s = face();
-    if (c.kind === 'valve') return s + valveArt();
-    if (c.kind === 'spout') return s + (opts.mirror ? `<g transform="translate(50 0) scale(-1 1)">${spoutArt(opts.pouring)}</g>` : spoutArt(opts.pouring));
+    if (c.kind === 'valve') return s + (piece.flip ? MIRROR(valveArt()) : valveArt());
+    if (c.kind === 'spout') return s + (opts.mirror || piece.flip ? MIRROR(spoutArt(opts.pouring)) : spoutArt(opts.pouring));
     if (c.kind === 'cap') return s + capArt(c, piece.flip, opts.usedCaps) + (piece.wrench ? wrenchIcon() : '');
     const op = LP.openingsOf(c, piece.flip);
     const m = MAT[c.mat];
@@ -1745,6 +2053,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       renderOverlay();
       return;
     }
+    layoutMode();
     renderMeta();
     renderChips();
     renderBoard();
@@ -1753,6 +2062,14 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     renderActions();
     renderOverlay();
     ui.anim = null;
+    ui.flash = -1;
+  }
+
+  function layoutMode() {
+    const app = $('app');
+    const many = live() && G().players.length > 1;
+    app.classList.toggle('with-chips', !!(many && shared()));
+    app.classList.toggle('with-others', !!(many && !shared()));
   }
 
   function renderMeta() {
@@ -1763,46 +2080,26 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     $('soundBtn').setAttribute('aria-pressed', String(ui.sound));
   }
 
-  function renderChips() {
-    const g = G();
-    const moves = selMoves();
-    const playable = new Set(moves.map((m) => m.target));
-    if (ui.wrench) playable.add(g.turn);
-    $('chips').innerHTML = g.players
-      .map((pl, i) => {
-        const b = pl.board;
-        const prog = Math.min(LP.progressOf(b), g.required);
-        const leak = LP.leakAt(b) >= 0;
-        const dead = g.phase !== 'over' && !LP.analyze(b, g.required).viable;
-        const wr = Array.from({ length: pl.wrenches }, () => ICON.wrench).join('');
-        const playing = live() && ui.busy && i === g.turn;
-        const cls = ['chip', i === ui.view ? 'viewing' : '', i === g.turn && g.phase !== 'over' ? 'turn' : '', playable.has(i) ? 'can-play' : '', i === ui.flash ? 'flash' : '', ui.dragOver === -2 - i ? 'dragover' : ''].join(' ');
-        const tags = [
-          wr ? `<span class="wr" title="Wrenches left">${wr}</span>` : '<span>no wrenches</span>',
-          leak ? `<span class="tag-leak">${ICON.drop} leak</span>` : '',
-          dead ? '<span class="tag-dead">dead end</span>' : '',
-          g.winner === i ? '<span class="tag-win">winner</span>' : '',
-          playing ? '<span class="thinking"><i></i><i></i><i></i></span>' : '',
-        ].join('');
-        return `<button type="button" class="${cls}" data-view="${i}" aria-pressed="${i === ui.view}">
-          <span class="nm">${esc(pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}</span><span class="ct">${prog}<small>/${g.required}</small></span>
-          <span class="bar"><i style="width:${(100 * prog) / g.required}%"></i></span>
-          <span class="tags">${tags}</span></button>`;
-      })
-      .join('');
-    ui.flash = -1;
-  }
-
   // Zoom to the part of the table in use (plus a free ring around it), shaped to the screen.
-  function computeView(b, aspect) {
+  function computeView(boards, aspect, minCols, minRows, extra) {
+    if (!Array.isArray(boards)) boards = [boards];
+    const b = boards[0];
     let x0 = b.w, x1 = 0, y0 = b.h, y1 = 0;
-    b.cells.forEach((p, i) => {
-      if (!p) return;
+    for (const i of extra || []) {
       const x = i % b.w;
       const y = Math.floor(i / b.w);
       x0 = Math.min(x0, x); x1 = Math.max(x1, x);
       y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-    });
+    }
+    for (const bb of boards) {
+      bb.cells.forEach((p, i) => {
+        if (!p) return;
+        const x = i % b.w;
+        const y = Math.floor(i / b.w);
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      });
+    }
     x0 = Math.max(0, x0 - 1); x1 = Math.min(b.w - 1, x1 + 1);
     y0 = Math.max(0, y0 - 1); y1 = Math.min(b.h - 1, y1 + 1);
     let flipCol = false;
@@ -1817,8 +2114,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       if ((flipRow && y0 > 0) || y1 >= b.h - 1) y0--;
       else y1++;
     };
-    while (x1 - x0 + 1 < Math.min(6, b.w)) addCol();
-    while (y1 - y0 + 1 < Math.min(5, b.h)) addRow();
+    while (x1 - x0 + 1 < Math.min(minCols || 6, b.w)) addCol();
+    while (y1 - y0 + 1 < Math.min(minRows || 5, b.h)) addRow();
     const px = () => ({ w: (x1 - x0 + 1) * CW + (x1 - x0) * GAP, h: (y1 - y0 + 1) * CH + (y1 - y0) * GAP });
     let s = px();
     if (s.w / s.h < aspect) {
@@ -1887,104 +2184,230 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     return best ? best.concat([b.spout]) : [];
   }
 
-  function renderBoard() {
+  // ---- player colors (used on the shared table and in panel headers)
+  const PCOLOR = ['#3aa0e6', '#e0874a', '#5fc58f', '#c58be0'];
+  const shared = () => G() && G().table === 'shared';
+  // Which players' pipelines are drawn on the surface that shows player v
+  const surfaceOf = (v) => (shared() ? G().players.map((_, i) => i) : [v]);
+
+  function badgeHTML(i, opts) {
+    opts = opts || {};
     const g = G();
-    const pl = g.players[ui.view];
+    const pl = g.players[i];
     const b = pl.board;
+    const prog = Math.min(LP.progressOf(b), g.required);
+    const leak = LP.leakAt(b) >= 0;
+    const dead = g.phase !== 'over' && !LP.analyze(b, g.required).viable;
+    const playing = live() && ui.busy && i === g.turn;
+    const you = live() && i === ui.viewer && humans() === 1;
+    const tags = [
+      `<span class="wr${pl.wrenches ? '' : ' none'}" title="${pl.wrenches} wrench${pl.wrenches === 1 ? '' : 'es'} left">${ICON.wrench}${pl.wrenches}</span>`,
+      leak ? `<span class="tag-leak">${ICON.drop}<span> leak</span></span>` : '',
+      dead ? '<span class="tag-dead">dead end</span>' : '',
+      g.winner === i ? '<span class="tag-win">winner</span>' : '',
+      playing ? '<span class="thinking"><i></i><i></i><i></i></span>' : '',
+    ].join('');
+    return `<span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(you && opts.main ? 'Your pipeline' : pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}</span>
+      <span class="ct">${prog}<small>/${g.required}</small></span>
+      <span class="bar"><i style="width:${(100 * prog) / g.required}%;background:${PCOLOR[i % 4]}"></i></span>
+      <span class="tags">${tags}</span>`;
+  }
+
+  function renderChips() {
+    const g = G();
+    const el = $('chips');
+    if (!shared()) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    el.hidden = false;
+    const moves = selMoves();
+    const playable = new Set(moves.map((m) => m.target));
+    if (ui.wrench) playable.add(g.turn);
+    el.innerHTML = g.players
+      .map((pl, i) => {
+        const cls = ['chip', (shared() ? i === ui.focus : i === ui.view) ? 'viewing' : '', i === g.turn && g.phase !== 'over' ? 'turn' : '', playable.has(i) ? 'can-play' : '', i === ui.flash ? 'flash' : '', ui.dragOver === -2 - i ? 'dragover' : ''].join(' ');
+        return `<button type="button" class="${cls}" data-view="${i}" aria-pressed="${i === ui.view}">${badgeHTML(i)}</button>`;
+      })
+      .join('');
+  }
+
+  // Draw the pipelines of `players` into `svg`. opts: {main, aspect, view}
+  function drawSurface(svg, players, opts) {
+    const g = G();
+    const boards = players.map((i) => g.players[i].board);
+    const b = boards[0];
     const W = b.w * CW + (b.w - 1) * GAP;
     const H = b.h * CH + (b.h - 1) * GAP;
-    const svg = $('board');
-    const wrap = $('boardwrap');
-    setViewBox(svg, computeView(b, Math.max(0.3, (wrap.clientWidth - 20) / Math.max(1, wrap.clientHeight - 20))));
-    svg.setAttribute('aria-label', pl.name + "'s pipeline");
-    $('viewnote').textContent = !live() ? '' : ui.view === ui.viewer && pl.kind === 'human' && humans() === 1 ? 'Your pipeline' : pl.name + "'s pipeline";
-
-    const targets = new Map(); // i -> {move, solid}
-    const want = ui.sel ? !!ui.flips[ui.sel] : false;
-    for (const m of selMoves()) {
-      if (m.target !== ui.view) continue;
-      const t = targets.get(m.i);
-      const match = !!m.flip === want || isSymmetric(ui.sel);
-      if (!t || (match && !t.solid)) targets.set(m.i, { move: m, solid: match });
-    }
-    if (ui.wrench && ui.view === g.turn) {
-      const lk = LP.leakAt(b);
-      if (lk >= 0) targets.set(lk, { move: null, solid: true });
-    }
+    const vb = opts.view;
     const pos = (i) => [(i % b.w) * (CW + GAP), Math.floor(i / b.w) * (CH + GAP)];
-    // Only draw cells near what's on screen (the endless table is big).
-    const vbs = [ui.vb, ui.vbTarget].filter(Boolean);
-    const cx0 = Math.max(0, Math.floor(Math.min(...vbs.map((v) => v[0])) / (CW + GAP)) - 1);
-    const cy0 = Math.max(0, Math.floor(Math.min(...vbs.map((v) => v[1])) / (CH + GAP)) - 1);
-    const cx1 = Math.min(b.w - 1, Math.ceil(Math.max(...vbs.map((v) => v[0] + v[2])) / (CW + GAP)) + 1);
-    const cy1 = Math.min(b.h - 1, Math.ceil(Math.max(...vbs.map((v) => v[1] + v[3])) / (CH + GAP)) + 1);
+    const boxes = opts.main ? [ui.vb, ui.vbTarget].filter(Boolean) : [vb];
+    const cx0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[0])) / (CW + GAP)) - 1);
+    const cy0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[1])) / (CH + GAP)) - 1);
+    const cx1 = Math.min(b.w - 1, Math.ceil(Math.max(...boxes.map((v) => v[0] + v[2])) / (CW + GAP)) + 1);
+    const cy1 = Math.min(b.h - 1, Math.ceil(Math.max(...boxes.map((v) => v[1] + v[3])) / (CH + GAP)) + 1);
     const inView = (i) => {
       const x = i % b.w;
       const y = Math.floor(i / b.w);
       return x >= cx0 && x <= cx1 && y >= cy0 && y <= cy1;
     };
-    const leak = LP.leakAt(b);
-    const pouring = g.phase === 'over' && g.winner === ui.view;
+    const tinted = shared();
+    // targets for the selected card on these pipelines
+    const targets = new Map();
+    const want = ui.sel ? !!ui.flips[ui.sel] : false;
+    for (const m of selMoves()) {
+      if (!players.includes(m.target)) continue;
+      const t = targets.get(m.i);
+      const match = !!m.flip === want || isSymmetric(ui.sel);
+      if (!t || (match && !t.solid)) targets.set(m.i, { move: m, solid: match });
+    }
+    if (ui.wrench && players.includes(g.turn)) {
+      const lk = LP.leakAt(g.players[g.turn].board);
+      if (lk >= 0) targets.set(lk, { move: null, solid: true });
+    }
     let out = `<rect class="tableedge" x="-3" y="-3" width="${W + 6}" height="${H + 6}" rx="7"/>`;
+    const owner = new Map();
+    players.forEach((pi, k) => boards[k].cells.forEach((p, i) => p && owner.set(i, pi)));
     for (let i = 0; i < b.cells.length; i++) {
       if (!inView(i)) continue;
       const [x, y] = pos(i);
-      const p = b.cells[i];
-      if (p) {
-        const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(b, i).map((u) => u.d)) : null;
-        const pop = ui.anim && ui.anim.target === ui.view && ui.anim.i === i;
-        out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && b.spoutDir === 'E' })}</g></g>`;
-      } else {
+      const pi = owner.get(i);
+      if (pi == null) {
         out += `<rect class="slot" x="${x + 1.5}" y="${y + 1.5}" width="${CW - 3}" height="${CH - 3}" rx="5"/>`;
+        continue;
       }
+      const bb = g.players[pi].board;
+      const p = bb.cells[i];
+      const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(bb, i).map((u) => u.d)) : null;
+      const pop = ui.anim && ui.anim.target === pi && ui.anim.i === i;
+      const pouring = g.phase === 'over' && g.winner === pi;
+      out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && bb.spoutDir === 'E', tint: tinted ? PCOLOR[pi % 4] : null })}</g></g>`;
     }
-    // ghosts of the selected card where it can go
     const card = ui.sel ? findCard(ui.sel) : null;
     for (const [i, t] of targets) {
       const [x, y] = pos(i);
-      if (t.move && card) {
+      if (opts.main && t.move && card) {
         const f = t.solid ? want : !want;
         out += `<g transform="translate(${x} ${y})" class="cardghost${ui.dragOver === i ? ' over' : ''}">${cardArt({ card, flip: card.kind === 'pipe' && isSymmetric(ui.sel) ? false : f })}</g>`;
       }
-      out += `<rect class="target${t.solid ? '' : ' flipneed'}${ui.dragOver === i ? ' over' : ''}" x="${x + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="5"/>`;
+      out += `<rect class="target${t.solid ? '' : ' flipneed'}${opts.main && ui.dragOver === i ? ' over' : ''}" x="${x + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="5"/>`;
     }
-    if (leak >= 0) {
-      const [x, y] = pos(leak);
-      out += `<rect class="leakring" x="${x - 1}" y="${y - 1}" width="${CW + 2}" height="${CH + 2}" rx="6"/>`;
-    }
-    if (ui.botMark && ui.botMark.target === ui.view && ui.botMark.seq === g.seq) {
+    players.forEach((pi, k) => {
+      const bb = boards[k];
+      const leak = LP.leakAt(bb);
+      if (leak >= 0) {
+        const [x, y] = pos(leak);
+        out += `<rect class="leakring" x="${x - 1}" y="${y - 1}" width="${CW + 2}" height="${CH + 2}" rx="6"/>`;
+      }
+      if (live() && pi !== ui.viewer && g.phase !== 'over' && (opts.main || (card && card.kind === 'pipe' && card.mat === 'leaky'))) {
+        const [x, y] = pos(bb.last);
+        out += `<path class="lastmark" d="M${x + CW - 14},${y + 2} h12 v12 z"><title>Last card played</title></path>`;
+      }
+      if (g.phase === 'over' && g.winner === pi) {
+        const path = waterPath(bb);
+        if (path.length > 1) {
+          const pts = path.map((i) => {
+            const [x, y] = pos(i);
+            return [x + 25, y + 35];
+          });
+          const [sx, sy] = pos(bb.spout);
+          pts[pts.length - 1] = [sx + (bb.spoutDir === 'E' ? 27 : 23), sy + 50];
+          let len = 0;
+          for (let q = 1; q < pts.length; q++) len += Math.abs(pts[q][0] - pts[q - 1][0]) + Math.abs(pts[q][1] - pts[q - 1][1]);
+          const d = 'M' + pts.map((q) => q.join(',')).join(' L');
+          out += `<g style="--len:${len.toFixed(0)};--dur:${Math.min(4, 0.18 * path.length).toFixed(2)}s"><path class="water" d="${d}"/><path class="water-shine" d="${d}"/></g>`;
+        }
+      }
+    });
+    if (ui.botMark && players.includes(ui.botMark.target) && ui.botMark.seq === g.seq) {
       const [x, y] = pos(ui.botMark.i);
       out += `<rect class="botmark" x="${x - 2}" y="${y - 2}" width="${CW + 4}" height="${CH + 4}" rx="7"/>`;
     }
-    if (ui.hint && ui.hint.target === ui.view && ui.hint.seq === g.seq && ui.hint.i != null) {
+    if (opts.main && ui.hint && players.includes(ui.hint.target) && ui.hint.seq === g.seq && ui.hint.i != null) {
       const [x, y] = pos(ui.hint.i);
       out += `<rect class="hintmark" x="${x - 3}" y="${y - 3}" width="${CW + 6}" height="${CH + 6}" rx="8"/>`;
     }
-    if (live() && ui.view !== ui.viewer && g.phase !== 'over') {
-      const [x, y] = pos(b.last);
-      out += `<path class="lastmark" d="M${x + CW - 14},${y + 2} h12 v12 z"><title>Last card played</title></path>`;
-    }
-    if (pouring) {
-      const path = waterPath(b);
-      if (path.length > 1) {
-        const pts = path.map((i) => {
-          const [x, y] = pos(i);
-          return [x + 25, y + 35];
-        });
-        const [sx, sy] = pos(b.spout);
-        pts[pts.length - 1] = [sx + (b.spoutDir === 'E' ? 27 : 23), sy + 50];
-        let len = 0;
-        for (let k = 1; k < pts.length; k++) len += Math.abs(pts[k][0] - pts[k - 1][0]) + Math.abs(pts[k][1] - pts[k - 1][1]);
-        const d = 'M' + pts.map((q) => q.join(',')).join(' L');
-        out += `<g style="--len:${len.toFixed(0)};--dur:${Math.min(4, 0.18 * path.length).toFixed(2)}s"><path class="water" d="${d}"/><path class="water-shine" d="${d}"/></g>`;
+    if (opts.main) {
+      for (let i = 0; i < b.cells.length; i++) {
+        if (!inView(i)) continue;
+        const [x, y] = pos(i);
+        out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
       }
     }
-    for (let i = 0; i < b.cells.length; i++) {
-      if (!inView(i)) continue;
-      const [x, y] = pos(i);
-      out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
-    }
     svg.innerHTML = out;
+    return targets.size;
+  }
+
+  // Shared table camera: everything if it fits at a readable size, else follow the action.
+  // Shared table camera: show every pipeline if the cards stay big enough to read; otherwise
+  // follow the action: whoever is playing, plus wherever the selected card could go.
+  function sharedView(aspect, wPx, hPx) {
+    const g = G();
+    const all = g.players.map((p) => p.board);
+    const px = (v) => Math.min(wPx / v[2], hPx / v[3]) * CW;
+    if (ui.fitAll) {
+      const b = all[0];
+      return computeView(all, aspect, b.w, b.h);
+    }
+    const focus = ui.focus != null ? ui.focus : ui.busy || g.phase === 'over' ? (g.phase === 'over' && g.winner >= 0 ? g.winner : g.turn) : ui.viewer;
+    const fb = [g.players[focus].board];
+    if (ui.focus != null) return computeView(fb, aspect, 6, 5);
+    const ms = selMoves().filter((m) => m.i != null);
+    const extra = ms.map((m) => m.i);
+    if (ui.botMark && ui.botMark.seq === g.seq) extra.push(ui.botMark.i);
+    const own = ms.filter((m) => m.target === focus).map((m) => m.i);
+    // a card that can only go on someone else: frame that pipeline instead of mine
+    const away = !own.length && ms.length ? ms[0].target : -1;
+    const near = away >= 0 ? computeView([g.players[away].board], aspect, 6, 5, ms.filter((m) => m.target === away).map((m) => m.i)) : computeView(fb, aspect, 6, 5, own);
+    // most to least context; take the first that keeps cards readable
+    const options = [computeView(all, aspect, 8, 6, extra), computeView(fb, aspect, 6, 5, extra), near];
+    return options.find((v) => px(v) >= 28) || near;
+  }
+
+  function renderBoard() {
+    const g = G();
+    const svg = $('board');
+    const wrap = $('boardwrap');
+    const pl = g.players[ui.view];
+    const aspect = Math.max(0.3, svg.clientWidth / Math.max(1, svg.clientHeight) || (wrap.clientWidth - 20) / Math.max(1, wrap.clientHeight - 60));
+    const players = surfaceOf(ui.view);
+    const view = shared() ? sharedView(aspect, svg.clientWidth || wrap.clientWidth, svg.clientHeight || wrap.clientHeight - 40) : computeView(pl.board, aspect);
+    setViewBox(svg, view);
+    svg.setAttribute('aria-label', shared() ? 'The shared table' : pl.name + "'s pipeline");
+    $('mainhead').innerHTML = !live() ? '' : shared() ? `<span class="nm">Shared table</span>${ui.focus != null ? `<span class="following" style="--pc:${PCOLOR[ui.focus % 4]}">${esc(g.players[ui.focus].name)}</span>` : ''}<button type="button" class="ghost tiny" data-act="fit">${ui.fitAll || ui.focus != null ? 'Follow play' : 'Whole table'}</button>` : badgeHTML(ui.view, { main: true });
+    $('mainhead').style.setProperty('--pc', PCOLOR[ui.view % 4]);
+    drawSurface(svg, players, { main: true, view });
+    renderOthers();
+  }
+
+  // Live panels for everyone not on the main board (Classic and Endless).
+  function renderOthers() {
+    const g = G();
+    const el = $('others');
+    if (!live() || shared()) {
+      el.innerHTML = '';
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    const moves = selMoves();
+    const playable = new Set(moves.map((m) => m.target));
+    const ids = g.players.map((_, i) => i).filter((i) => i !== ui.view);
+    el.style.setProperty('--n', ids.length);
+    el.innerHTML = ids
+      .map((i) => {
+        const cls = ['panel', 'mini', i === g.turn && g.phase !== 'over' ? 'turn' : '', playable.has(i) ? 'can-play' : '', i === ui.flash ? 'flash' : '', ui.dragOver === -2 - i ? 'dragover' : ''].join(' ');
+        return `<button type="button" class="${cls}" data-view="${i}" aria-label="Show ${esc(g.players[i].name)}'s pipeline"><span class="phead">${badgeHTML(i)}</span><svg class="minisvg" data-mini="${i}" aria-hidden="true"></svg></button>`;
+      })
+      .join('');
+    el.querySelectorAll('svg.minisvg').forEach((svg) => {
+      const i = +svg.dataset.mini;
+      const aspect = Math.max(0.4, svg.clientWidth / Math.max(1, svg.clientHeight) || 1.4);
+      const view = computeView(g.players[i].board, aspect, 4, 3);
+      svg.setAttribute('viewBox', view.join(' '));
+      drawSurface(svg, [i], { main: false, view });
+    });
   }
 
   function renderStatus() {
@@ -2003,7 +2426,10 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       const ms = selMoves();
       const viewName = ui.view === g.turn ? 'your pipeline' : g.players[ui.view].name + "'s pipeline";
       const here = ms.filter((m) => m.target === ui.view).length;
-      prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : here ? `Drag or tap onto a glowing slot on ${viewName}. Tap the card again to turn it.` : 'That card goes on another pipeline. Tap a name with a blue dot.';
+      if (shared()) {
+        const atk = ms.filter((m) => m.target !== g.turn).map((m) => g.players[m.target].name);
+        prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : atk.length ? `Drag or tap it onto a glowing slot to hit ${[...new Set(atk)].join(' or ')}.` : 'Drag or tap onto a glowing slot. Tap the card again to turn it.';
+      } else prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : here ? `Drag or tap onto a glowing slot on ${viewName}. Tap the card again to turn it.` : 'That card goes on another pipeline. Tap a board with a blue dot.';
     } else {
       const mine = g.players[g.turn].board;
       prompt = LP.leakAt(mine) >= 0 ? 'Your pipeline is leaking. Cover it with the same shape, use a wrench, or discard.' : `${humans() > 1 ? cur.name + ', your' : 'Your'} turn. Pick a card.`;
@@ -2106,6 +2532,11 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     return `<div class="hero-art" aria-hidden="true">${mk({ kind: 'spout' })}${mk({ kind: 'pipe', mat: 'iron', shape: 'H' })}${mk({ kind: 'pipe', mat: 'leaky', shape: 'L1' }, true)}${mk({ kind: 'pipe', mat: 'copper', shape: 'T1' })}${mk({ kind: 'pipe', mat: 'iron', shape: 'H' })}${mk({ kind: 'valve' })}</div>`;
   }
 
+  const TABLE_NOTES = {
+    classic: 'Classic: each player has their own table. The valve sits at the right edge and the spout pours left, as in the rulebook.',
+    endless: 'Endless: each player has their own table with no edge. The valve sits in the middle and the spout can pour left or right, pointing away from your valve.',
+    shared: 'Shared: everyone builds on one table. Pipes can’t run into another pipeline or block the spot right in front of its open end, so space gets tight. The spout pours away from your valve.',
+  };
   function setupHTML() {
     const s = ui.seats;
     const saved = loadSaved();
@@ -2138,9 +2569,14 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       <div class="row">${s.length < 4 ? '<button type="button" class="btn" data-act="add-seat">Add a player</button>' : ''}</div>
       ${hasBot ? `<div class="levelrow"><span>Computer skill</span><span class="seg" role="group" aria-label="Computer skill">${lv('easy', 'Easy', 'Makes casual mistakes')}${lv('normal', 'Normal', 'Solid, a little unpredictable')}${lv('hard', 'Hard', 'Its best self-play-tuned play')}</span></div>` : ''}
       <div class="levelrow"><span>Table</span><span class="seg" role="group" aria-label="Table">
-        <button type="button" class="${ui.table !== 'endless' ? 'on' : ''}" data-table="classic" title="Valve at the table's right edge, spout pours left">Classic edge</button>
-        <button type="button" class="${ui.table === 'endless' ? 'on' : ''}" data-table="endless" title="No edges, valve in the middle">Endless</button></span></div>
-      <p class="muted">${ui.table === 'endless' ? 'Endless: no table edge, the valve sits in the middle, and the spout can pour left or right as long as it points away from your valve.' : 'Classic: the valve sits at the right edge of the table and the spout pours left, as in the rulebook.'}</p>
+        <button type="button" class="${ui.table === 'classic' ? 'on' : ''}" data-table="classic" title="Valve at the table's right edge, spout pours left">Classic</button>
+        <button type="button" class="${ui.table === 'endless' ? 'on' : ''}" data-table="endless" title="No edges, valve in the middle">Endless</button>
+        <button type="button" class="${ui.table === 'shared' ? 'on' : ''}" data-table="shared" title="Everyone builds on one table">Shared</button></span></div>
+      <p class="muted">${TABLE_NOTES[ui.table] || TABLE_NOTES.classic}</p>
+      <div class="levelrow"><span>Deck</span><span class="seg" role="group" aria-label="Deck">
+        <button type="button" class="${ui.deck === 'classic' ? 'on' : ''}" data-deck="classic" title="The card mix as in the box">Original</button>
+        <button type="button" class="${ui.deck === 'tuned' ? 'on' : ''}" data-deck="tuned" title="Remixed with self-play for less waiting">Tuned</button></span></div>
+      <p class="muted">${ui.deck === 'tuned' ? 'Tuned: more elbows, few T’s, slightly fewer leaks, plus 6 wrench cards that give you a wrench when drawn. Less time stuck waiting for one exact card.' : 'Original: the card mix from the box.'}</p>
       <p class="muted">${s.length} players · ${need} pipe cards to win. For pass-and-play, give each person a seat and pass the device between turns.</p>
       ${hasHuman ? '' : '<p class="muted warn">Add at least one person.</p>'}
       <div class="row end">
@@ -2237,7 +2673,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       <h3>Goal</h3>
       <p>Build a leak-free line from your valve to your spout with at least 12, 10 or 8 pipe cards (2, 3 or 4 players). Caps don't count.</p>
       <h3>Your turn</h3>
-      <p>You draw a card automatically. Then do one thing: add a good pipe (copper or iron) to your pipeline, put a leaky pipe or leaky cap on an opponent, repair a leak, or discard. You end with five cards.</p>
+      <p>You draw a card automatically. Then do one thing: add a good pipe (copper or iron) to your pipeline, put a leaky pipe or leaky cap on an opponent, repair a leak, or discard. You end with five cards. The other pipelines are shown live beside or below yours; tap one to bring it up big.</p>
       <h3>Placing</h3>
       <p>On the classic table the valve sits at the right edge and you build leftward. Cards stay upright; tap a selected card again (or Turn) to spin it 180°. Pipes must line up on every side, nothing may point off the table, and no card may completely block a pipeline. Loops are fine as long as the pipeline can keep going.</p>
       <h3>Leaks</h3>
@@ -2252,8 +2688,12 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       <p>From thousands of self-play games: spring a leak whenever you can't build; fix leaks fast and spend your wrenches; treat T pieces as discards; keep cards that fit where your pipe is heading; and turn your pipe to point left before the end, budgeting a card or two for the turns. Stuck? Tap Hint to see what the Hard computer would do.</p>
       <h3>Endless table</h3>
       <p>An optional mode with no table edge. The valve sits in the middle, so you can build in any direction, and the spout can pour left or right as long as it points away from your valve (the rulebook's "away and down from your faucet").</p>
+      <h3>Shared table</h3>
+      <p>Everyone builds on one table, with valves facing each other from opposite edges. You can't put a card on top of another pipeline, run an open pipe into it, or take the spot right in front of one of its open ends, and no card may leave another pipeline with no way to finish. Each pipeline's cards carry its player's color. The spout pours away from your valve. Tap a player to follow their part of the table, or Whole table to see everything.</p>
+      <h3>Tuned deck</h3>
+      <p>The default deck is a remix found with self-play: more elbows, very few T's, slightly fewer leaky pipes and six wrench cards. A wrench card isn't kept in your hand: when you draw one you get a wrench on the spot (up to three) and draw again. In the original mix, most of the time spent stuck is a leak you can't fix because you're out of wrenches and waiting for one exact card; the tuned deck cuts that waiting by about two thirds while keeping most of the sabotage. Pick Original on the setup screen for the boxed mix.</p>
       <h3>House rules in this app</h3>
-      <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card deck here is an estimate.</p>
+      <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card Original deck here is an estimate.</p>
       <div class="row end"><button type="button" class="btn primary" data-act="rules-close" data-focus>Got it</button></div>
     </div>`;
   }
@@ -2262,7 +2702,9 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   function startGame(seats) {
     ui.gen++;
     const players = seats.map((s, i) => ({ name: (s.name || '').trim() || (s.kind === 'bot' ? BOT_NAMES[i % 3] : 'Player ' + (i + 1)), kind: s.kind }));
-    ui.game = LP.newGame({ players, table: ui.table });
+    ui.game = LP.newGame({ players, table: ui.table, deck: ui.deck });
+    ui.focus = null;
+    ui.fitAll = false;
     ui.game.level = ui.level;
     ui.demo = null;
     ui.sel = null;
@@ -2279,6 +2721,17 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     ui.view = firstHuman;
     save();
     proceed(true);
+  }
+
+  // Wrench cards turn into wrenches as they're drawn; tell the person when it happens to them.
+  function noteFoundWrench(g) {
+    const last = g.log[g.log.length - 1];
+    const mine = g.log.filter((l) => l.kind === 'found' && l.p === g.turn && l.n > (ui.since[g.turn] != null ? ui.since[g.turn] : -1));
+    if (!mine.length || ui.foundShown === mine[mine.length - 1].n) return;
+    ui.foundShown = mine[mine.length - 1].n;
+    toast(`${humans() > 1 ? g.players[g.turn].name + ' drew' : 'You drew'} a wrench card: +1 wrench.`);
+    sfx.repair();
+    return last;
   }
 
   function proceed(fresh) {
@@ -2309,6 +2762,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       return;
     }
     ui.busy = false;
+    noteFoundWrench(g);
     if (humans() > 1 && ui.viewer !== g.turn) {
       ui.modal = { type: 'pass' };
       return render();
@@ -2385,6 +2839,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     ui.wrench = false;
     ui.hint = null;
     ui.botMark = null;
+    ui.focus = null;
     save();
     if (g.phase === 'wrenchDiscard') return render();
     proceed();
@@ -2394,7 +2849,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     const g = G();
     if (!isHumanTurn()) return;
     if (ui.wrench) {
-      if (ui.view === g.turn && LP.leakAt(g.players[g.turn].board) === i) play({ type: 'wrench', i, target: g.turn });
+      if ((shared() || ui.view === g.turn) && LP.leakAt(g.players[g.turn].board) === i) play({ type: 'wrench', i, target: g.turn });
       else {
         sfx.nope();
         toast('Tap the leaking card on your own pipeline.');
@@ -2402,13 +2857,14 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       return;
     }
     if (!ui.sel) {
-      const p = g.players[ui.view].board.cells[i];
-      if (p) toast(cardLabel(p.card, p.flip).replace(/^./, (c) => c.toUpperCase()) + '.');
+      const who = cellOwner(i);
+      const p = who >= 0 ? g.players[who].board.cells[i] : null;
+      if (p) toast((shared() ? (who === ui.viewer && humans() === 1 ? 'Yours: ' : g.players[who].name + ': ') : '') + cardLabel(p.card, p.flip).replace(/^./, (c) => c.toUpperCase()) + '.');
       return;
     }
     if (g.phase !== 'play') return;
     const want = !!ui.flips[ui.sel];
-    const here = selMoves().filter((m) => m.target === ui.view && m.i === i);
+    const here = selMoves().filter((m) => (shared() || m.target === ui.view) && m.i === i);
     if (!here.length) {
       sfx.nope();
       toast(whyNot(i, want));
@@ -2424,13 +2880,35 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     play(m);
   }
 
+  // Which pipeline a cell belongs to: the one whose card is there, or on the shared table the
+  // one whose open end points at it. Falls back to the board on screen.
+  function cellOwner(i) {
+    const g = G();
+    if (!shared()) return g.players[ui.view].board.cells[i] ? ui.view : -1;
+    return g.players.findIndex((pl) => pl.board.cells[i]);
+  }
+  function aimedAt(i) {
+    const g = G();
+    const own = cellOwner(i);
+    if (own >= 0) return own;
+    if (!shared()) return ui.view;
+    const card = findCard(ui.sel);
+    const leaky = card && (card.kind === 'pipe' ? card.mat === 'leaky' : card.kind === 'cap' && LP.capHasLeak(card));
+    const ends = g.players.map((pl, k) => (LP.openEnds(pl.board).some((e) => e.t === i) ? k : -1)).filter((k) => k >= 0);
+    if (leaky) {
+      const opp = ends.find((k) => k !== g.turn);
+      if (opp != null) return opp;
+    }
+    return g.turn;
+  }
   function whyNot(i, flip) {
     const g = G();
     const card = findCard(ui.sel);
-    const b = g.players[ui.view].board;
+    const tgt = aimedAt(i);
+    const b = g.players[tgt].board;
     const occupied = !!b.cells[i];
     const type = occupied ? 'cover' : card.kind === 'cap' ? 'cap' : 'pipe';
-    const r = LP.checkMove(g, g.turn, { type, cardId: ui.sel, target: ui.view, i, flip });
+    const r = LP.checkMove(g, g.turn, { type, cardId: ui.sel, target: tgt, i, flip });
     if (r.ok) return 'Try turning the card.';
     if (!occupied && !LP.openEnds(b).some((e) => e.t === i)) return 'Cards have to attach to an open pipe end.';
     return r.reason;
@@ -2540,12 +3018,22 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     let over = -1;
     const hit = under && under.closest && under.closest('#board [data-i]');
     const chip = under && under.closest && under.closest('[data-view]');
+    // Hovering another player's panel swaps it onto the main board. After a swap the panel under
+    // the pointer shows someone else, so swapping stays off until the pointer is back on the board.
+    if (under && under.closest && under.closest('#boardwrap')) d.armed = true;
     if (hit) over = +hit.dataset.i;
-    else if (chip) {
+    else if (chip && d.armed !== false) {
       const v = +chip.dataset.view;
-      if (v !== ui.view) {
+      if (shared()) {
+        if (ui.focus !== v) {
+          ui.focus = v;
+          ui.fitAll = false;
+          renderDuringDrag();
+        }
+      } else if (v !== ui.view) {
         ui.view = v;
         ui.dragOver = -1;
+        d.armed = false;
         renderDuringDrag();
         return;
       }
@@ -2591,18 +3079,28 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
     if (ui.suppressClick) return;
-    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table]');
+    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck]');
     if (!t) return;
     audio();
     if (t.dataset.i != null && t.closest('#board')) return tryCell(+t.dataset.i);
     if (t.dataset.view != null) {
-      ui.view = +t.dataset.view;
+      if (shared()) {
+        const v = +t.dataset.view;
+        ui.focus = ui.focus === v ? null : v;
+        ui.fitAll = false;
+      } else ui.view = +t.dataset.view;
       return render();
     }
     if (t.dataset.card) return selectCard(t.dataset.card);
     if (t.dataset.table) {
       readSeatNames();
       ui.table = t.dataset.table;
+      savePrefs();
+      return renderOverlay();
+    }
+    if (t.dataset.deck) {
+      readSeatNames();
+      ui.deck = t.dataset.deck;
       savePrefs();
       return renderOverlay();
     }
@@ -2646,6 +3144,10 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
         return render();
       case 'hint':
         return showHint();
+      case 'fit':
+        ui.fitAll = !(ui.fitAll || ui.focus != null);
+        ui.focus = null;
+        return render();
       case 'pass':
         return play({ type: 'pass' });
       case 'add-seat': {
@@ -2781,6 +3283,9 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   ui.modal = { type: 'setup' };
   render();
   window.__leaky = ui;
+  window.__leakyStart = (seats) => startGame(seats);
+  window.__leakyRender = () => render();
+  window.__leakyProceed = () => proceed();
 })();
 
 </script>

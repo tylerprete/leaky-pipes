@@ -1,0 +1,18 @@
+
+== original deck, 2p, 300 games: 39% of turns are discards/passes
+   69%  leaking: no wrench, no matching cover card
+   18%  had a move, chose to discard
+   10%  no fit: nothing fits own ends; leaky cards had no target
+    2%  only attacks available, chose to discard
+    1%  no fit: nothing fits own ends (no leaky cards)
+  leaky pipes make up 33% of a stuck player's hand
+  53% of turns start with a leak on your own pipeline; leaks last median 0.5 rounds, p90 6.5
+
+== balanced deck, 2p, 300 games: 20% of turns are discards/passes
+   40%  had a move, chose to discard
+   27%  leaking: no wrench, no matching cover card
+   17%  no fit: nothing fits own ends; leaky cards had no target
+   12%  only attacks available, chose to discard
+    5%  no fit: nothing fits own ends (no leaky cards)
+  leaky pipes make up 27% of a stuck player's hand
+  23% of turns start with a leak on your own pipeline; leaks last median 0.5 rounds, p90 1.0

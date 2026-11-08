@@ -1,0 +1,6 @@
+headon 15x9 away         closest 7.9, met 7% | stuck 0.14 drought 1.6 p90 4.5 rounds 22.3 attacks 0.18 stall 0.000 spread 0.07 29ms/game
+headon 15x9 cross        closest 5.2, met 30% | stuck 0.26 drought 5.1 p90 7.5 rounds 38.4 attacks 0.21 stall 0.005 spread 0.07 42ms/game
+headon 13x9 cross        closest 4.2, met 30% | stuck 0.24 drought 6.4 p90 9.0 rounds 36.8 attacks 0.20 stall 0.015 spread 0.12 46ms/game
+facing 15x9 cross        closest 5.6, met 17% | stuck 0.27 drought 9.6 p90 9.0 rounds 44.1 attacks 0.21 stall 0.030 spread 0.01 54ms/game
+headon 3p 17x11 cross    closest 2.3, met 60% | stuck 0.32 drought 6.7 p90 7.0 rounds 38.9 attacks 0.22 stall 0.025 spread 0.10 84ms/game
+headon 4p 17x11 cross    closest 1.7, met 87% | stuck 0.34 drought 8.4 p90 8.8 rounds 35.2 attacks 0.23 stall 0.058 spread 0.14 86ms/game

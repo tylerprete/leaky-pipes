@@ -23,6 +23,7 @@
     ],
     level: 'normal',
     table: 'classic',
+    deck: 'tuned',
     sound: true,
     view: 0,
     viewer: 0,
@@ -52,12 +53,13 @@
     if (typeof pr.sound === 'boolean') ui.sound = pr.sound;
     if (pr.level) ui.level = pr.level;
     if (pr.table) ui.table = pr.table;
+    if (pr.deck) ui.deck = pr.deck;
   } catch (e) {
     /* no storage */
   }
   function savePrefs() {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table }));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table, deck: ui.deck }));
     } catch (e) {
       /* no storage */
     }
@@ -216,12 +218,21 @@
       water
     );
   }
+  const MIRROR = (inner) => `<g transform="translate(50 0) scale(-1 1)">${inner}</g>`;
+  function tintMark(color) {
+    // owner color on the shared table: a colored frame and corner tab
+    return `<rect x="1" y="1" width="48" height="68" rx="5" fill="none" stroke="${color}" stroke-width="2.6" opacity=".9"/><path d="M1,14 V6 Q1,1 6,1 H14 Z" fill="${color}"/>`;
+  }
   function cardArt(piece, opts) {
     opts = opts || {};
+    const s = cardArtInner(piece, opts);
+    return opts.tint ? s + tintMark(opts.tint) : s;
+  }
+  function cardArtInner(piece, opts) {
     const c = piece.card;
     let s = face();
-    if (c.kind === 'valve') return s + valveArt();
-    if (c.kind === 'spout') return s + (opts.mirror ? `<g transform="translate(50 0) scale(-1 1)">${spoutArt(opts.pouring)}</g>` : spoutArt(opts.pouring));
+    if (c.kind === 'valve') return s + (piece.flip ? MIRROR(valveArt()) : valveArt());
+    if (c.kind === 'spout') return s + (opts.mirror || piece.flip ? MIRROR(spoutArt(opts.pouring)) : spoutArt(opts.pouring));
     if (c.kind === 'cap') return s + capArt(c, piece.flip, opts.usedCaps) + (piece.wrench ? wrenchIcon() : '');
     const op = LP.openingsOf(c, piece.flip);
     const m = MAT[c.mat];
@@ -328,6 +339,7 @@
       renderOverlay();
       return;
     }
+    layoutMode();
     renderMeta();
     renderChips();
     renderBoard();
@@ -336,6 +348,14 @@
     renderActions();
     renderOverlay();
     ui.anim = null;
+    ui.flash = -1;
+  }
+
+  function layoutMode() {
+    const app = $('app');
+    const many = live() && G().players.length > 1;
+    app.classList.toggle('with-chips', !!(many && shared()));
+    app.classList.toggle('with-others', !!(many && !shared()));
   }
 
   function renderMeta() {
@@ -346,46 +366,26 @@
     $('soundBtn').setAttribute('aria-pressed', String(ui.sound));
   }
 
-  function renderChips() {
-    const g = G();
-    const moves = selMoves();
-    const playable = new Set(moves.map((m) => m.target));
-    if (ui.wrench) playable.add(g.turn);
-    $('chips').innerHTML = g.players
-      .map((pl, i) => {
-        const b = pl.board;
-        const prog = Math.min(LP.progressOf(b), g.required);
-        const leak = LP.leakAt(b) >= 0;
-        const dead = g.phase !== 'over' && !LP.analyze(b, g.required).viable;
-        const wr = Array.from({ length: pl.wrenches }, () => ICON.wrench).join('');
-        const playing = live() && ui.busy && i === g.turn;
-        const cls = ['chip', i === ui.view ? 'viewing' : '', i === g.turn && g.phase !== 'over' ? 'turn' : '', playable.has(i) ? 'can-play' : '', i === ui.flash ? 'flash' : '', ui.dragOver === -2 - i ? 'dragover' : ''].join(' ');
-        const tags = [
-          wr ? `<span class="wr" title="Wrenches left">${wr}</span>` : '<span>no wrenches</span>',
-          leak ? `<span class="tag-leak">${ICON.drop} leak</span>` : '',
-          dead ? '<span class="tag-dead">dead end</span>' : '',
-          g.winner === i ? '<span class="tag-win">winner</span>' : '',
-          playing ? '<span class="thinking"><i></i><i></i><i></i></span>' : '',
-        ].join('');
-        return `<button type="button" class="${cls}" data-view="${i}" aria-pressed="${i === ui.view}">
-          <span class="nm">${esc(pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}</span><span class="ct">${prog}<small>/${g.required}</small></span>
-          <span class="bar"><i style="width:${(100 * prog) / g.required}%"></i></span>
-          <span class="tags">${tags}</span></button>`;
-      })
-      .join('');
-    ui.flash = -1;
-  }
-
   // Zoom to the part of the table in use (plus a free ring around it), shaped to the screen.
-  function computeView(b, aspect) {
+  function computeView(boards, aspect, minCols, minRows, extra) {
+    if (!Array.isArray(boards)) boards = [boards];
+    const b = boards[0];
     let x0 = b.w, x1 = 0, y0 = b.h, y1 = 0;
-    b.cells.forEach((p, i) => {
-      if (!p) return;
+    for (const i of extra || []) {
       const x = i % b.w;
       const y = Math.floor(i / b.w);
       x0 = Math.min(x0, x); x1 = Math.max(x1, x);
       y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-    });
+    }
+    for (const bb of boards) {
+      bb.cells.forEach((p, i) => {
+        if (!p) return;
+        const x = i % b.w;
+        const y = Math.floor(i / b.w);
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      });
+    }
     x0 = Math.max(0, x0 - 1); x1 = Math.min(b.w - 1, x1 + 1);
     y0 = Math.max(0, y0 - 1); y1 = Math.min(b.h - 1, y1 + 1);
     let flipCol = false;
@@ -400,8 +400,8 @@
       if ((flipRow && y0 > 0) || y1 >= b.h - 1) y0--;
       else y1++;
     };
-    while (x1 - x0 + 1 < Math.min(6, b.w)) addCol();
-    while (y1 - y0 + 1 < Math.min(5, b.h)) addRow();
+    while (x1 - x0 + 1 < Math.min(minCols || 6, b.w)) addCol();
+    while (y1 - y0 + 1 < Math.min(minRows || 5, b.h)) addRow();
     const px = () => ({ w: (x1 - x0 + 1) * CW + (x1 - x0) * GAP, h: (y1 - y0 + 1) * CH + (y1 - y0) * GAP });
     let s = px();
     if (s.w / s.h < aspect) {
@@ -470,104 +470,230 @@
     return best ? best.concat([b.spout]) : [];
   }
 
-  function renderBoard() {
+  // ---- player colors (used on the shared table and in panel headers)
+  const PCOLOR = ['#3aa0e6', '#e0874a', '#5fc58f', '#c58be0'];
+  const shared = () => G() && G().table === 'shared';
+  // Which players' pipelines are drawn on the surface that shows player v
+  const surfaceOf = (v) => (shared() ? G().players.map((_, i) => i) : [v]);
+
+  function badgeHTML(i, opts) {
+    opts = opts || {};
     const g = G();
-    const pl = g.players[ui.view];
+    const pl = g.players[i];
     const b = pl.board;
+    const prog = Math.min(LP.progressOf(b), g.required);
+    const leak = LP.leakAt(b) >= 0;
+    const dead = g.phase !== 'over' && !LP.analyze(b, g.required).viable;
+    const playing = live() && ui.busy && i === g.turn;
+    const you = live() && i === ui.viewer && humans() === 1;
+    const tags = [
+      `<span class="wr${pl.wrenches ? '' : ' none'}" title="${pl.wrenches} wrench${pl.wrenches === 1 ? '' : 'es'} left">${ICON.wrench}${pl.wrenches}</span>`,
+      leak ? `<span class="tag-leak">${ICON.drop}<span> leak</span></span>` : '',
+      dead ? '<span class="tag-dead">dead end</span>' : '',
+      g.winner === i ? '<span class="tag-win">winner</span>' : '',
+      playing ? '<span class="thinking"><i></i><i></i><i></i></span>' : '',
+    ].join('');
+    return `<span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(you && opts.main ? 'Your pipeline' : pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}</span>
+      <span class="ct">${prog}<small>/${g.required}</small></span>
+      <span class="bar"><i style="width:${(100 * prog) / g.required}%;background:${PCOLOR[i % 4]}"></i></span>
+      <span class="tags">${tags}</span>`;
+  }
+
+  function renderChips() {
+    const g = G();
+    const el = $('chips');
+    if (!shared()) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    el.hidden = false;
+    const moves = selMoves();
+    const playable = new Set(moves.map((m) => m.target));
+    if (ui.wrench) playable.add(g.turn);
+    el.innerHTML = g.players
+      .map((pl, i) => {
+        const cls = ['chip', (shared() ? i === ui.focus : i === ui.view) ? 'viewing' : '', i === g.turn && g.phase !== 'over' ? 'turn' : '', playable.has(i) ? 'can-play' : '', i === ui.flash ? 'flash' : '', ui.dragOver === -2 - i ? 'dragover' : ''].join(' ');
+        return `<button type="button" class="${cls}" data-view="${i}" aria-pressed="${i === ui.view}">${badgeHTML(i)}</button>`;
+      })
+      .join('');
+  }
+
+  // Draw the pipelines of `players` into `svg`. opts: {main, aspect, view}
+  function drawSurface(svg, players, opts) {
+    const g = G();
+    const boards = players.map((i) => g.players[i].board);
+    const b = boards[0];
     const W = b.w * CW + (b.w - 1) * GAP;
     const H = b.h * CH + (b.h - 1) * GAP;
-    const svg = $('board');
-    const wrap = $('boardwrap');
-    setViewBox(svg, computeView(b, Math.max(0.3, (wrap.clientWidth - 20) / Math.max(1, wrap.clientHeight - 20))));
-    svg.setAttribute('aria-label', pl.name + "'s pipeline");
-    $('viewnote').textContent = !live() ? '' : ui.view === ui.viewer && pl.kind === 'human' && humans() === 1 ? 'Your pipeline' : pl.name + "'s pipeline";
-
-    const targets = new Map(); // i -> {move, solid}
-    const want = ui.sel ? !!ui.flips[ui.sel] : false;
-    for (const m of selMoves()) {
-      if (m.target !== ui.view) continue;
-      const t = targets.get(m.i);
-      const match = !!m.flip === want || isSymmetric(ui.sel);
-      if (!t || (match && !t.solid)) targets.set(m.i, { move: m, solid: match });
-    }
-    if (ui.wrench && ui.view === g.turn) {
-      const lk = LP.leakAt(b);
-      if (lk >= 0) targets.set(lk, { move: null, solid: true });
-    }
+    const vb = opts.view;
     const pos = (i) => [(i % b.w) * (CW + GAP), Math.floor(i / b.w) * (CH + GAP)];
-    // Only draw cells near what's on screen (the endless table is big).
-    const vbs = [ui.vb, ui.vbTarget].filter(Boolean);
-    const cx0 = Math.max(0, Math.floor(Math.min(...vbs.map((v) => v[0])) / (CW + GAP)) - 1);
-    const cy0 = Math.max(0, Math.floor(Math.min(...vbs.map((v) => v[1])) / (CH + GAP)) - 1);
-    const cx1 = Math.min(b.w - 1, Math.ceil(Math.max(...vbs.map((v) => v[0] + v[2])) / (CW + GAP)) + 1);
-    const cy1 = Math.min(b.h - 1, Math.ceil(Math.max(...vbs.map((v) => v[1] + v[3])) / (CH + GAP)) + 1);
+    const boxes = opts.main ? [ui.vb, ui.vbTarget].filter(Boolean) : [vb];
+    const cx0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[0])) / (CW + GAP)) - 1);
+    const cy0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[1])) / (CH + GAP)) - 1);
+    const cx1 = Math.min(b.w - 1, Math.ceil(Math.max(...boxes.map((v) => v[0] + v[2])) / (CW + GAP)) + 1);
+    const cy1 = Math.min(b.h - 1, Math.ceil(Math.max(...boxes.map((v) => v[1] + v[3])) / (CH + GAP)) + 1);
     const inView = (i) => {
       const x = i % b.w;
       const y = Math.floor(i / b.w);
       return x >= cx0 && x <= cx1 && y >= cy0 && y <= cy1;
     };
-    const leak = LP.leakAt(b);
-    const pouring = g.phase === 'over' && g.winner === ui.view;
+    const tinted = shared();
+    // targets for the selected card on these pipelines
+    const targets = new Map();
+    const want = ui.sel ? !!ui.flips[ui.sel] : false;
+    for (const m of selMoves()) {
+      if (!players.includes(m.target)) continue;
+      const t = targets.get(m.i);
+      const match = !!m.flip === want || isSymmetric(ui.sel);
+      if (!t || (match && !t.solid)) targets.set(m.i, { move: m, solid: match });
+    }
+    if (ui.wrench && players.includes(g.turn)) {
+      const lk = LP.leakAt(g.players[g.turn].board);
+      if (lk >= 0) targets.set(lk, { move: null, solid: true });
+    }
     let out = `<rect class="tableedge" x="-3" y="-3" width="${W + 6}" height="${H + 6}" rx="7"/>`;
+    const owner = new Map();
+    players.forEach((pi, k) => boards[k].cells.forEach((p, i) => p && owner.set(i, pi)));
     for (let i = 0; i < b.cells.length; i++) {
       if (!inView(i)) continue;
       const [x, y] = pos(i);
-      const p = b.cells[i];
-      if (p) {
-        const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(b, i).map((u) => u.d)) : null;
-        const pop = ui.anim && ui.anim.target === ui.view && ui.anim.i === i;
-        out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && b.spoutDir === 'E' })}</g></g>`;
-      } else {
+      const pi = owner.get(i);
+      if (pi == null) {
         out += `<rect class="slot" x="${x + 1.5}" y="${y + 1.5}" width="${CW - 3}" height="${CH - 3}" rx="5"/>`;
+        continue;
       }
+      const bb = g.players[pi].board;
+      const p = bb.cells[i];
+      const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(bb, i).map((u) => u.d)) : null;
+      const pop = ui.anim && ui.anim.target === pi && ui.anim.i === i;
+      const pouring = g.phase === 'over' && g.winner === pi;
+      out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && bb.spoutDir === 'E', tint: tinted ? PCOLOR[pi % 4] : null })}</g></g>`;
     }
-    // ghosts of the selected card where it can go
     const card = ui.sel ? findCard(ui.sel) : null;
     for (const [i, t] of targets) {
       const [x, y] = pos(i);
-      if (t.move && card) {
+      if (opts.main && t.move && card) {
         const f = t.solid ? want : !want;
         out += `<g transform="translate(${x} ${y})" class="cardghost${ui.dragOver === i ? ' over' : ''}">${cardArt({ card, flip: card.kind === 'pipe' && isSymmetric(ui.sel) ? false : f })}</g>`;
       }
-      out += `<rect class="target${t.solid ? '' : ' flipneed'}${ui.dragOver === i ? ' over' : ''}" x="${x + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="5"/>`;
+      out += `<rect class="target${t.solid ? '' : ' flipneed'}${opts.main && ui.dragOver === i ? ' over' : ''}" x="${x + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="5"/>`;
     }
-    if (leak >= 0) {
-      const [x, y] = pos(leak);
-      out += `<rect class="leakring" x="${x - 1}" y="${y - 1}" width="${CW + 2}" height="${CH + 2}" rx="6"/>`;
-    }
-    if (ui.botMark && ui.botMark.target === ui.view && ui.botMark.seq === g.seq) {
+    players.forEach((pi, k) => {
+      const bb = boards[k];
+      const leak = LP.leakAt(bb);
+      if (leak >= 0) {
+        const [x, y] = pos(leak);
+        out += `<rect class="leakring" x="${x - 1}" y="${y - 1}" width="${CW + 2}" height="${CH + 2}" rx="6"/>`;
+      }
+      if (live() && pi !== ui.viewer && g.phase !== 'over' && (opts.main || (card && card.kind === 'pipe' && card.mat === 'leaky'))) {
+        const [x, y] = pos(bb.last);
+        out += `<path class="lastmark" d="M${x + CW - 14},${y + 2} h12 v12 z"><title>Last card played</title></path>`;
+      }
+      if (g.phase === 'over' && g.winner === pi) {
+        const path = waterPath(bb);
+        if (path.length > 1) {
+          const pts = path.map((i) => {
+            const [x, y] = pos(i);
+            return [x + 25, y + 35];
+          });
+          const [sx, sy] = pos(bb.spout);
+          pts[pts.length - 1] = [sx + (bb.spoutDir === 'E' ? 27 : 23), sy + 50];
+          let len = 0;
+          for (let q = 1; q < pts.length; q++) len += Math.abs(pts[q][0] - pts[q - 1][0]) + Math.abs(pts[q][1] - pts[q - 1][1]);
+          const d = 'M' + pts.map((q) => q.join(',')).join(' L');
+          out += `<g style="--len:${len.toFixed(0)};--dur:${Math.min(4, 0.18 * path.length).toFixed(2)}s"><path class="water" d="${d}"/><path class="water-shine" d="${d}"/></g>`;
+        }
+      }
+    });
+    if (ui.botMark && players.includes(ui.botMark.target) && ui.botMark.seq === g.seq) {
       const [x, y] = pos(ui.botMark.i);
       out += `<rect class="botmark" x="${x - 2}" y="${y - 2}" width="${CW + 4}" height="${CH + 4}" rx="7"/>`;
     }
-    if (ui.hint && ui.hint.target === ui.view && ui.hint.seq === g.seq && ui.hint.i != null) {
+    if (opts.main && ui.hint && players.includes(ui.hint.target) && ui.hint.seq === g.seq && ui.hint.i != null) {
       const [x, y] = pos(ui.hint.i);
       out += `<rect class="hintmark" x="${x - 3}" y="${y - 3}" width="${CW + 6}" height="${CH + 6}" rx="8"/>`;
     }
-    if (live() && ui.view !== ui.viewer && g.phase !== 'over') {
-      const [x, y] = pos(b.last);
-      out += `<path class="lastmark" d="M${x + CW - 14},${y + 2} h12 v12 z"><title>Last card played</title></path>`;
-    }
-    if (pouring) {
-      const path = waterPath(b);
-      if (path.length > 1) {
-        const pts = path.map((i) => {
-          const [x, y] = pos(i);
-          return [x + 25, y + 35];
-        });
-        const [sx, sy] = pos(b.spout);
-        pts[pts.length - 1] = [sx + (b.spoutDir === 'E' ? 27 : 23), sy + 50];
-        let len = 0;
-        for (let k = 1; k < pts.length; k++) len += Math.abs(pts[k][0] - pts[k - 1][0]) + Math.abs(pts[k][1] - pts[k - 1][1]);
-        const d = 'M' + pts.map((q) => q.join(',')).join(' L');
-        out += `<g style="--len:${len.toFixed(0)};--dur:${Math.min(4, 0.18 * path.length).toFixed(2)}s"><path class="water" d="${d}"/><path class="water-shine" d="${d}"/></g>`;
+    if (opts.main) {
+      for (let i = 0; i < b.cells.length; i++) {
+        if (!inView(i)) continue;
+        const [x, y] = pos(i);
+        out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
       }
     }
-    for (let i = 0; i < b.cells.length; i++) {
-      if (!inView(i)) continue;
-      const [x, y] = pos(i);
-      out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
-    }
     svg.innerHTML = out;
+    return targets.size;
+  }
+
+  // Shared table camera: everything if it fits at a readable size, else follow the action.
+  // Shared table camera: show every pipeline if the cards stay big enough to read; otherwise
+  // follow the action: whoever is playing, plus wherever the selected card could go.
+  function sharedView(aspect, wPx, hPx) {
+    const g = G();
+    const all = g.players.map((p) => p.board);
+    const px = (v) => Math.min(wPx / v[2], hPx / v[3]) * CW;
+    if (ui.fitAll) {
+      const b = all[0];
+      return computeView(all, aspect, b.w, b.h);
+    }
+    const focus = ui.focus != null ? ui.focus : ui.busy || g.phase === 'over' ? (g.phase === 'over' && g.winner >= 0 ? g.winner : g.turn) : ui.viewer;
+    const fb = [g.players[focus].board];
+    if (ui.focus != null) return computeView(fb, aspect, 6, 5);
+    const ms = selMoves().filter((m) => m.i != null);
+    const extra = ms.map((m) => m.i);
+    if (ui.botMark && ui.botMark.seq === g.seq) extra.push(ui.botMark.i);
+    const own = ms.filter((m) => m.target === focus).map((m) => m.i);
+    // a card that can only go on someone else: frame that pipeline instead of mine
+    const away = !own.length && ms.length ? ms[0].target : -1;
+    const near = away >= 0 ? computeView([g.players[away].board], aspect, 6, 5, ms.filter((m) => m.target === away).map((m) => m.i)) : computeView(fb, aspect, 6, 5, own);
+    // most to least context; take the first that keeps cards readable
+    const options = [computeView(all, aspect, 8, 6, extra), computeView(fb, aspect, 6, 5, extra), near];
+    return options.find((v) => px(v) >= 28) || near;
+  }
+
+  function renderBoard() {
+    const g = G();
+    const svg = $('board');
+    const wrap = $('boardwrap');
+    const pl = g.players[ui.view];
+    const aspect = Math.max(0.3, svg.clientWidth / Math.max(1, svg.clientHeight) || (wrap.clientWidth - 20) / Math.max(1, wrap.clientHeight - 60));
+    const players = surfaceOf(ui.view);
+    const view = shared() ? sharedView(aspect, svg.clientWidth || wrap.clientWidth, svg.clientHeight || wrap.clientHeight - 40) : computeView(pl.board, aspect);
+    setViewBox(svg, view);
+    svg.setAttribute('aria-label', shared() ? 'The shared table' : pl.name + "'s pipeline");
+    $('mainhead').innerHTML = !live() ? '' : shared() ? `<span class="nm">Shared table</span>${ui.focus != null ? `<span class="following" style="--pc:${PCOLOR[ui.focus % 4]}">${esc(g.players[ui.focus].name)}</span>` : ''}<button type="button" class="ghost tiny" data-act="fit">${ui.fitAll || ui.focus != null ? 'Follow play' : 'Whole table'}</button>` : badgeHTML(ui.view, { main: true });
+    $('mainhead').style.setProperty('--pc', PCOLOR[ui.view % 4]);
+    drawSurface(svg, players, { main: true, view });
+    renderOthers();
+  }
+
+  // Live panels for everyone not on the main board (Classic and Endless).
+  function renderOthers() {
+    const g = G();
+    const el = $('others');
+    if (!live() || shared()) {
+      el.innerHTML = '';
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    const moves = selMoves();
+    const playable = new Set(moves.map((m) => m.target));
+    const ids = g.players.map((_, i) => i).filter((i) => i !== ui.view);
+    el.style.setProperty('--n', ids.length);
+    el.innerHTML = ids
+      .map((i) => {
+        const cls = ['panel', 'mini', i === g.turn && g.phase !== 'over' ? 'turn' : '', playable.has(i) ? 'can-play' : '', i === ui.flash ? 'flash' : '', ui.dragOver === -2 - i ? 'dragover' : ''].join(' ');
+        return `<button type="button" class="${cls}" data-view="${i}" aria-label="Show ${esc(g.players[i].name)}'s pipeline"><span class="phead">${badgeHTML(i)}</span><svg class="minisvg" data-mini="${i}" aria-hidden="true"></svg></button>`;
+      })
+      .join('');
+    el.querySelectorAll('svg.minisvg').forEach((svg) => {
+      const i = +svg.dataset.mini;
+      const aspect = Math.max(0.4, svg.clientWidth / Math.max(1, svg.clientHeight) || 1.4);
+      const view = computeView(g.players[i].board, aspect, 4, 3);
+      svg.setAttribute('viewBox', view.join(' '));
+      drawSurface(svg, [i], { main: false, view });
+    });
   }
 
   function renderStatus() {
@@ -586,7 +712,10 @@
       const ms = selMoves();
       const viewName = ui.view === g.turn ? 'your pipeline' : g.players[ui.view].name + "'s pipeline";
       const here = ms.filter((m) => m.target === ui.view).length;
-      prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : here ? `Drag or tap onto a glowing slot on ${viewName}. Tap the card again to turn it.` : 'That card goes on another pipeline. Tap a name with a blue dot.';
+      if (shared()) {
+        const atk = ms.filter((m) => m.target !== g.turn).map((m) => g.players[m.target].name);
+        prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : atk.length ? `Drag or tap it onto a glowing slot to hit ${[...new Set(atk)].join(' or ')}.` : 'Drag or tap onto a glowing slot. Tap the card again to turn it.';
+      } else prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : here ? `Drag or tap onto a glowing slot on ${viewName}. Tap the card again to turn it.` : 'That card goes on another pipeline. Tap a board with a blue dot.';
     } else {
       const mine = g.players[g.turn].board;
       prompt = LP.leakAt(mine) >= 0 ? 'Your pipeline is leaking. Cover it with the same shape, use a wrench, or discard.' : `${humans() > 1 ? cur.name + ', your' : 'Your'} turn. Pick a card.`;
@@ -689,6 +818,11 @@
     return `<div class="hero-art" aria-hidden="true">${mk({ kind: 'spout' })}${mk({ kind: 'pipe', mat: 'iron', shape: 'H' })}${mk({ kind: 'pipe', mat: 'leaky', shape: 'L1' }, true)}${mk({ kind: 'pipe', mat: 'copper', shape: 'T1' })}${mk({ kind: 'pipe', mat: 'iron', shape: 'H' })}${mk({ kind: 'valve' })}</div>`;
   }
 
+  const TABLE_NOTES = {
+    classic: 'Classic: each player has their own table. The valve sits at the right edge and the spout pours left, as in the rulebook.',
+    endless: 'Endless: each player has their own table with no edge. The valve sits in the middle and the spout can pour left or right, pointing away from your valve.',
+    shared: 'Shared: everyone builds on one table. Pipes can’t run into another pipeline or block the spot right in front of its open end, so space gets tight. The spout pours away from your valve.',
+  };
   function setupHTML() {
     const s = ui.seats;
     const saved = loadSaved();
@@ -721,9 +855,14 @@
       <div class="row">${s.length < 4 ? '<button type="button" class="btn" data-act="add-seat">Add a player</button>' : ''}</div>
       ${hasBot ? `<div class="levelrow"><span>Computer skill</span><span class="seg" role="group" aria-label="Computer skill">${lv('easy', 'Easy', 'Makes casual mistakes')}${lv('normal', 'Normal', 'Solid, a little unpredictable')}${lv('hard', 'Hard', 'Its best self-play-tuned play')}</span></div>` : ''}
       <div class="levelrow"><span>Table</span><span class="seg" role="group" aria-label="Table">
-        <button type="button" class="${ui.table !== 'endless' ? 'on' : ''}" data-table="classic" title="Valve at the table's right edge, spout pours left">Classic edge</button>
-        <button type="button" class="${ui.table === 'endless' ? 'on' : ''}" data-table="endless" title="No edges, valve in the middle">Endless</button></span></div>
-      <p class="muted">${ui.table === 'endless' ? 'Endless: no table edge, the valve sits in the middle, and the spout can pour left or right as long as it points away from your valve.' : 'Classic: the valve sits at the right edge of the table and the spout pours left, as in the rulebook.'}</p>
+        <button type="button" class="${ui.table === 'classic' ? 'on' : ''}" data-table="classic" title="Valve at the table's right edge, spout pours left">Classic</button>
+        <button type="button" class="${ui.table === 'endless' ? 'on' : ''}" data-table="endless" title="No edges, valve in the middle">Endless</button>
+        <button type="button" class="${ui.table === 'shared' ? 'on' : ''}" data-table="shared" title="Everyone builds on one table">Shared</button></span></div>
+      <p class="muted">${TABLE_NOTES[ui.table] || TABLE_NOTES.classic}</p>
+      <div class="levelrow"><span>Deck</span><span class="seg" role="group" aria-label="Deck">
+        <button type="button" class="${ui.deck === 'classic' ? 'on' : ''}" data-deck="classic" title="The card mix as in the box">Original</button>
+        <button type="button" class="${ui.deck === 'tuned' ? 'on' : ''}" data-deck="tuned" title="Remixed with self-play for less waiting">Tuned</button></span></div>
+      <p class="muted">${ui.deck === 'tuned' ? 'Tuned: more elbows, few T’s, slightly fewer leaks, plus 6 wrench cards that give you a wrench when drawn. Less time stuck waiting for one exact card.' : 'Original: the card mix from the box.'}</p>
       <p class="muted">${s.length} players · ${need} pipe cards to win. For pass-and-play, give each person a seat and pass the device between turns.</p>
       ${hasHuman ? '' : '<p class="muted warn">Add at least one person.</p>'}
       <div class="row end">
@@ -820,7 +959,7 @@
       <h3>Goal</h3>
       <p>Build a leak-free line from your valve to your spout with at least 12, 10 or 8 pipe cards (2, 3 or 4 players). Caps don't count.</p>
       <h3>Your turn</h3>
-      <p>You draw a card automatically. Then do one thing: add a good pipe (copper or iron) to your pipeline, put a leaky pipe or leaky cap on an opponent, repair a leak, or discard. You end with five cards.</p>
+      <p>You draw a card automatically. Then do one thing: add a good pipe (copper or iron) to your pipeline, put a leaky pipe or leaky cap on an opponent, repair a leak, or discard. You end with five cards. The other pipelines are shown live beside or below yours; tap one to bring it up big.</p>
       <h3>Placing</h3>
       <p>On the classic table the valve sits at the right edge and you build leftward. Cards stay upright; tap a selected card again (or Turn) to spin it 180°. Pipes must line up on every side, nothing may point off the table, and no card may completely block a pipeline. Loops are fine as long as the pipeline can keep going.</p>
       <h3>Leaks</h3>
@@ -835,8 +974,12 @@
       <p>From thousands of self-play games: spring a leak whenever you can't build; fix leaks fast and spend your wrenches; treat T pieces as discards; keep cards that fit where your pipe is heading; and turn your pipe to point left before the end, budgeting a card or two for the turns. Stuck? Tap Hint to see what the Hard computer would do.</p>
       <h3>Endless table</h3>
       <p>An optional mode with no table edge. The valve sits in the middle, so you can build in any direction, and the spout can pour left or right as long as it points away from your valve (the rulebook's "away and down from your faucet").</p>
+      <h3>Shared table</h3>
+      <p>Everyone builds on one table, with valves facing each other from opposite edges. You can't put a card on top of another pipeline, run an open pipe into it, or take the spot right in front of one of its open ends, and no card may leave another pipeline with no way to finish. Each pipeline's cards carry its player's color. The spout pours away from your valve. Tap a player to follow their part of the table, or Whole table to see everything.</p>
+      <h3>Tuned deck</h3>
+      <p>The default deck is a remix found with self-play: more elbows, very few T's, slightly fewer leaky pipes and six wrench cards. A wrench card isn't kept in your hand: when you draw one you get a wrench on the spot (up to three) and draw again. In the original mix, most of the time spent stuck is a leak you can't fix because you're out of wrenches and waiting for one exact card; the tuned deck cuts that waiting by about two thirds while keeping most of the sabotage. Pick Original on the setup screen for the boxed mix.</p>
       <h3>House rules in this app</h3>
-      <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card deck here is an estimate.</p>
+      <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card Original deck here is an estimate.</p>
       <div class="row end"><button type="button" class="btn primary" data-act="rules-close" data-focus>Got it</button></div>
     </div>`;
   }
@@ -845,7 +988,9 @@
   function startGame(seats) {
     ui.gen++;
     const players = seats.map((s, i) => ({ name: (s.name || '').trim() || (s.kind === 'bot' ? BOT_NAMES[i % 3] : 'Player ' + (i + 1)), kind: s.kind }));
-    ui.game = LP.newGame({ players, table: ui.table });
+    ui.game = LP.newGame({ players, table: ui.table, deck: ui.deck });
+    ui.focus = null;
+    ui.fitAll = false;
     ui.game.level = ui.level;
     ui.demo = null;
     ui.sel = null;
@@ -862,6 +1007,17 @@
     ui.view = firstHuman;
     save();
     proceed(true);
+  }
+
+  // Wrench cards turn into wrenches as they're drawn; tell the person when it happens to them.
+  function noteFoundWrench(g) {
+    const last = g.log[g.log.length - 1];
+    const mine = g.log.filter((l) => l.kind === 'found' && l.p === g.turn && l.n > (ui.since[g.turn] != null ? ui.since[g.turn] : -1));
+    if (!mine.length || ui.foundShown === mine[mine.length - 1].n) return;
+    ui.foundShown = mine[mine.length - 1].n;
+    toast(`${humans() > 1 ? g.players[g.turn].name + ' drew' : 'You drew'} a wrench card: +1 wrench.`);
+    sfx.repair();
+    return last;
   }
 
   function proceed(fresh) {
@@ -892,6 +1048,7 @@
       return;
     }
     ui.busy = false;
+    noteFoundWrench(g);
     if (humans() > 1 && ui.viewer !== g.turn) {
       ui.modal = { type: 'pass' };
       return render();
@@ -968,6 +1125,7 @@
     ui.wrench = false;
     ui.hint = null;
     ui.botMark = null;
+    ui.focus = null;
     save();
     if (g.phase === 'wrenchDiscard') return render();
     proceed();
@@ -977,7 +1135,7 @@
     const g = G();
     if (!isHumanTurn()) return;
     if (ui.wrench) {
-      if (ui.view === g.turn && LP.leakAt(g.players[g.turn].board) === i) play({ type: 'wrench', i, target: g.turn });
+      if ((shared() || ui.view === g.turn) && LP.leakAt(g.players[g.turn].board) === i) play({ type: 'wrench', i, target: g.turn });
       else {
         sfx.nope();
         toast('Tap the leaking card on your own pipeline.');
@@ -985,13 +1143,14 @@
       return;
     }
     if (!ui.sel) {
-      const p = g.players[ui.view].board.cells[i];
-      if (p) toast(cardLabel(p.card, p.flip).replace(/^./, (c) => c.toUpperCase()) + '.');
+      const who = cellOwner(i);
+      const p = who >= 0 ? g.players[who].board.cells[i] : null;
+      if (p) toast((shared() ? (who === ui.viewer && humans() === 1 ? 'Yours: ' : g.players[who].name + ': ') : '') + cardLabel(p.card, p.flip).replace(/^./, (c) => c.toUpperCase()) + '.');
       return;
     }
     if (g.phase !== 'play') return;
     const want = !!ui.flips[ui.sel];
-    const here = selMoves().filter((m) => m.target === ui.view && m.i === i);
+    const here = selMoves().filter((m) => (shared() || m.target === ui.view) && m.i === i);
     if (!here.length) {
       sfx.nope();
       toast(whyNot(i, want));
@@ -1007,13 +1166,35 @@
     play(m);
   }
 
+  // Which pipeline a cell belongs to: the one whose card is there, or on the shared table the
+  // one whose open end points at it. Falls back to the board on screen.
+  function cellOwner(i) {
+    const g = G();
+    if (!shared()) return g.players[ui.view].board.cells[i] ? ui.view : -1;
+    return g.players.findIndex((pl) => pl.board.cells[i]);
+  }
+  function aimedAt(i) {
+    const g = G();
+    const own = cellOwner(i);
+    if (own >= 0) return own;
+    if (!shared()) return ui.view;
+    const card = findCard(ui.sel);
+    const leaky = card && (card.kind === 'pipe' ? card.mat === 'leaky' : card.kind === 'cap' && LP.capHasLeak(card));
+    const ends = g.players.map((pl, k) => (LP.openEnds(pl.board).some((e) => e.t === i) ? k : -1)).filter((k) => k >= 0);
+    if (leaky) {
+      const opp = ends.find((k) => k !== g.turn);
+      if (opp != null) return opp;
+    }
+    return g.turn;
+  }
   function whyNot(i, flip) {
     const g = G();
     const card = findCard(ui.sel);
-    const b = g.players[ui.view].board;
+    const tgt = aimedAt(i);
+    const b = g.players[tgt].board;
     const occupied = !!b.cells[i];
     const type = occupied ? 'cover' : card.kind === 'cap' ? 'cap' : 'pipe';
-    const r = LP.checkMove(g, g.turn, { type, cardId: ui.sel, target: ui.view, i, flip });
+    const r = LP.checkMove(g, g.turn, { type, cardId: ui.sel, target: tgt, i, flip });
     if (r.ok) return 'Try turning the card.';
     if (!occupied && !LP.openEnds(b).some((e) => e.t === i)) return 'Cards have to attach to an open pipe end.';
     return r.reason;
@@ -1123,12 +1304,22 @@
     let over = -1;
     const hit = under && under.closest && under.closest('#board [data-i]');
     const chip = under && under.closest && under.closest('[data-view]');
+    // Hovering another player's panel swaps it onto the main board. After a swap the panel under
+    // the pointer shows someone else, so swapping stays off until the pointer is back on the board.
+    if (under && under.closest && under.closest('#boardwrap')) d.armed = true;
     if (hit) over = +hit.dataset.i;
-    else if (chip) {
+    else if (chip && d.armed !== false) {
       const v = +chip.dataset.view;
-      if (v !== ui.view) {
+      if (shared()) {
+        if (ui.focus !== v) {
+          ui.focus = v;
+          ui.fitAll = false;
+          renderDuringDrag();
+        }
+      } else if (v !== ui.view) {
         ui.view = v;
         ui.dragOver = -1;
+        d.armed = false;
         renderDuringDrag();
         return;
       }
@@ -1174,18 +1365,28 @@
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
     if (ui.suppressClick) return;
-    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table]');
+    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck]');
     if (!t) return;
     audio();
     if (t.dataset.i != null && t.closest('#board')) return tryCell(+t.dataset.i);
     if (t.dataset.view != null) {
-      ui.view = +t.dataset.view;
+      if (shared()) {
+        const v = +t.dataset.view;
+        ui.focus = ui.focus === v ? null : v;
+        ui.fitAll = false;
+      } else ui.view = +t.dataset.view;
       return render();
     }
     if (t.dataset.card) return selectCard(t.dataset.card);
     if (t.dataset.table) {
       readSeatNames();
       ui.table = t.dataset.table;
+      savePrefs();
+      return renderOverlay();
+    }
+    if (t.dataset.deck) {
+      readSeatNames();
+      ui.deck = t.dataset.deck;
       savePrefs();
       return renderOverlay();
     }
@@ -1229,6 +1430,10 @@
         return render();
       case 'hint':
         return showHint();
+      case 'fit':
+        ui.fitAll = !(ui.fitAll || ui.focus != null);
+        ui.focus = null;
+        return render();
       case 'pass':
         return play({ type: 'pass' });
       case 'add-seat': {
@@ -1364,4 +1569,7 @@
   ui.modal = { type: 'setup' };
   render();
   window.__leaky = ui;
+  window.__leakyStart = (seats) => startGame(seats);
+  window.__leakyRender = () => render();
+  window.__leakyProceed = () => proceed();
 })();
