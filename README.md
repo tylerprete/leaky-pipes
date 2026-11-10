@@ -9,9 +9,9 @@ Play it at https://tylerprete.github.io/leaky-pipes/ (GitHub Pages serves `docs/
 - **Tables**:
   - *Classic*: each player's own table, with the valve at the right edge.
   - *Endless*: no edges, with the valve in the middle.
-  - *Shared*: one table for everyone. Valves face each other, and pipelines can't run into each other or block the spot in front of another pipeline's open end.
+  - *Shared*: one endless table for everyone. Valves face each other, and pipelines can't run into each other or block the spot in front of another pipeline's open end.
 - **Decks**:
-  - *Tuned* (default): a self-play remix with more elbows, very few T's, slightly fewer leaky pipes, and 6 wrench cards (a wrench card becomes a wrench when drawn).
+  - *Tuned* (default): a self-play remix with more elbows, very few T's, slightly fewer leaky pipes, and 6 wrench cards (hold one and play it to fix a leak; the card is the discard).
   - *Original*: an estimate of the boxed mix.
 - On Classic and Endless, the other pipelines are shown live next to yours. Tap one to swap it onto the big board, or drag a card over it.
 

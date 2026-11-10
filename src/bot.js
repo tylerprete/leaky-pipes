@@ -67,6 +67,7 @@
     }
 
     function myValue(game, p, b, hand, wrenches) {
+      for (const c of hand) if (c.kind === 'wrench') wrenches++; // a wrench card is a wrench in waiting
       const cost = analyzeCost(game, b);
       let v = -cost;
       // hand fit
@@ -179,6 +180,10 @@
         if (m.type === 'pass') continue;
         if (m.type === 'wrench') {
           const nb = LP.boardAfter(me.board, m, null, p);
+          if (m.cardId) {
+            consider(m, myValue(game, p, nb, without(m.cardId), me.wrenches) - base);
+            continue;
+          }
           const drop = worstCard(game, p, me.hand, nb, me.wrenches - 1);
           consider(m, myValue(game, p, nb, without(drop), me.wrenches - 1) - base);
           continue;
@@ -276,13 +281,7 @@
       }
       g.players.forEach((pl, i) => {
         if (i !== p) {
-          const len = pl.hand.length;
-          pl.hand = [];
-          while (pl.hand.length < len) {
-            const k = pool.findIndex((c) => c.kind !== 'wrench');
-            if (k < 0) break;
-            pl.hand.push(pool.splice(k, 1)[0]);
-          }
+          pl.hand = pool.splice(0, pl.hand.length);
         }
       });
       g.deck = pool;

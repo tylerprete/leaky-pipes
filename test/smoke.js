@@ -29,7 +29,7 @@ const { chromium } = require('playwright');
     if (m.type === 'discard') {
       await page.click(`[data-card="${m.cardId}"]`);
       await page.click('[data-act="discard"]');
-    } else if (m.type === 'wrench') {
+    } else if (m.type === 'wrench' && !m.cardId) {
       await page.click('[data-act="wrench"]');
       await page.click(`#board [data-i="${m.i}"]`);
     } else {
@@ -37,7 +37,7 @@ const { chromium } = require('playwright');
       const view = await page.evaluate(() => window.__leaky.view);
       if (view !== m.target) await page.click(`[data-view="${m.target}"]`);
       const flip = await page.evaluate((id) => !!window.__leaky.flips[id], m.cardId);
-      if (!!m.flip !== flip) await page.click('[data-act="turn"]');
+      if (m.type !== 'wrench' && !!m.flip !== flip) await page.click('[data-act="turn"]');
       if (shots < 2 && m.target !== 0) { await page.screenshot({ path: `/home/claude/leaky/shots/attack${shots}.png` }); shots++; }
       await page.click(`#board [data-i="${m.i}"]`);
     }

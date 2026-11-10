@@ -234,6 +234,8 @@
     if (c.kind === 'valve') return s + (piece.flip ? MIRROR(valveArt()) : valveArt());
     if (c.kind === 'spout') return s + (opts.mirror || piece.flip ? MIRROR(spoutArt(opts.pouring)) : spoutArt(opts.pouring));
     if (c.kind === 'cap') return s + capArt(c, piece.flip, opts.usedCaps) + (piece.wrench ? wrenchIcon() : '');
+    if (c.kind === 'wrench')
+      return s + `<circle cx="25" cy="33" r="17" fill="rgba(95,197,143,.16)" stroke="#5fc58f" stroke-width="1.4"/><g transform="translate(5.5 13.5) scale(1.62)"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3.6 17.1a1.6 1.6 0 0 0 2.3 2.3l5.7-5.7a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.3-.6-.6-2.3z" fill="#6f7f8c" stroke="#3d4852" stroke-width=".7"/></g><text x="25" y="63" text-anchor="middle" font-size="7.5" font-weight="700" fill="#2f7a55" font-family="Barlow, sans-serif">FIX LEAK</text>`;
     const op = LP.openingsOf(c, piece.flip);
     const m = MAT[c.mat];
     s += tube(pipePath(op), m);
@@ -249,6 +251,7 @@
   }
   function cardLabel(card, flip) {
     if (card.kind === 'cap') return LP.describeCard(card);
+    if (card.kind === 'wrench') return 'wrench card, fixes a leak on your pipeline';
     const names = { N: 'up', S: 'down', E: 'right', W: 'left' };
     return LP.describeCard(card) + ', open ' + LP.openingsOf(card, flip).map((d) => names[d]).join(' and ');
   }
@@ -329,7 +332,7 @@
     return c && c.kind === 'pipe' && (c.shape === 'V' || c.shape === 'H');
   }
   function canTurn(c) {
-    return c && !(c.kind === 'pipe' && (c.shape === 'V' || c.shape === 'H'));
+    return c && c.kind !== 'wrench' && !(c.kind === 'pipe' && (c.shape === 'V' || c.shape === 'H'));
   }
 
   // ---------------------------------------------------------------- rendering
@@ -633,8 +636,7 @@
     const all = g.players.map((p) => p.board);
     const px = (v) => Math.min(wPx / v[2], hPx / v[3]) * CW;
     if (ui.fitAll) {
-      const b = all[0];
-      return computeView(all, aspect, b.w, b.h);
+      return computeView(all, aspect, 8, 6);
     }
     const focus = ui.focus != null ? ui.focus : ui.busy || g.phase === 'over' ? (g.phase === 'over' && g.winner >= 0 ? g.winner : g.turn) : ui.viewer;
     const fb = [g.players[focus].board];
@@ -708,6 +710,8 @@
     else if (ui.busy) prompt = `${cur.name} is playing…`;
     else if (g.phase === 'wrenchDiscard') prompt = 'Wrench placed. Pick a card to discard to finish your turn.';
     else if (ui.wrench) prompt = 'Tap the leaking card to put your wrench on it.';
+    else if (ui.sel && findCard(ui.sel) && findCard(ui.sel).kind === 'wrench')
+      prompt = LP.leakAt(cur.board) >= 0 ? 'Drag or tap the wrench card onto your leak. No extra discard needed.' : 'A wrench card fixes a leak on your pipeline. Keep it for when you need it, or discard it.';
     else if (ui.sel) {
       const ms = selMoves();
       const viewName = ui.view === g.turn ? 'your pipeline' : g.players[ui.view].name + "'s pipeline";
@@ -821,7 +825,7 @@
   const TABLE_NOTES = {
     classic: 'Classic: each player has their own table. The valve sits at the right edge and the spout pours left, as in the rulebook.',
     endless: 'Endless: each player has their own table with no edge. The valve sits in the middle and the spout can pour left or right, pointing away from your valve.',
-    shared: 'Shared: everyone builds on one table. Pipes can’t run into another pipeline or block the spot right in front of its open end, so space gets tight. The spout pours away from your valve.',
+    shared: 'Shared: everyone builds on one endless table, valves facing each other. Pipes can’t run into another pipeline or block the spot right in front of its open end, so space gets tight. The spout pours away from your valve.',
   };
   function setupHTML() {
     const s = ui.seats;
@@ -862,7 +866,7 @@
       <div class="levelrow"><span>Deck</span><span class="seg" role="group" aria-label="Deck">
         <button type="button" class="${ui.deck === 'classic' ? 'on' : ''}" data-deck="classic" title="The card mix as in the box">Original</button>
         <button type="button" class="${ui.deck === 'tuned' ? 'on' : ''}" data-deck="tuned" title="Remixed with self-play for less waiting">Tuned</button></span></div>
-      <p class="muted">${ui.deck === 'tuned' ? 'Tuned: more elbows, few T’s, slightly fewer leaks, plus 6 wrench cards that give you a wrench when drawn. Less time stuck waiting for one exact card.' : 'Original: the card mix from the box.'}</p>
+      <p class="muted">${ui.deck === 'tuned' ? 'Tuned: more elbows, few T’s, slightly fewer leaks, plus 6 wrench cards you can hold and play to fix a leak. Less time stuck waiting for one exact card.' : 'Original: the card mix from the box.'}</p>
       <p class="muted">${s.length} players · ${need} pipe cards to win. For pass-and-play, give each person a seat and pass the device between turns.</p>
       ${hasHuman ? '' : '<p class="muted warn">Add at least one person.</p>'}
       <div class="row end">
@@ -975,9 +979,9 @@
       <h3>Endless table</h3>
       <p>An optional mode with no table edge. The valve sits in the middle, so you can build in any direction, and the spout can pour left or right as long as it points away from your valve (the rulebook's "away and down from your faucet").</p>
       <h3>Shared table</h3>
-      <p>Everyone builds on one table, with valves facing each other from opposite edges. You can't put a card on top of another pipeline, run an open pipe into it, or take the spot right in front of one of its open ends, and no card may leave another pipeline with no way to finish. Each pipeline's cards carry its player's color. The spout pours away from your valve. Tap a player to follow their part of the table, or Whole table to see everything.</p>
+      <p>Everyone builds on one table with no edges, with valves facing each other across the middle. You can't put a card on top of another pipeline, run an open pipe into it, or take the spot right in front of one of its open ends, and no card may leave another pipeline with no way to finish. Each pipeline's cards carry its player's color. The spout pours away from your valve. Tap a player to follow their part of the table, or Whole table to see everything.</p>
       <h3>Tuned deck</h3>
-      <p>The default deck is a remix found with self-play: more elbows, very few T's, slightly fewer leaky pipes and six wrench cards. A wrench card isn't kept in your hand: when you draw one you get a wrench on the spot (up to three) and draw again. In the original mix, most of the time spent stuck is a leak you can't fix because you're out of wrenches and waiting for one exact card; the tuned deck cuts that waiting by about two thirds while keeping most of the sabotage. Pick Original on the setup screen for the boxed mix.</p>
+      <p>The default deck is a remix found with self-play: more elbows, very few T's, slightly fewer leaky pipes and six wrench cards. A wrench card sits in your hand like any other card. Play it on your leak to fix it; the card is your discard, so you don't give up a second card the way you do with one of your two wrenches. In the original mix, most of the time spent stuck is a leak you can't fix because you're out of wrenches and waiting for one exact card; the tuned deck cuts that waiting by about two thirds while keeping most of the sabotage. Pick Original on the setup screen for the boxed mix.</p>
       <h3>House rules in this app</h3>
       <p class="muted">A leak can't leave someone's pipeline with no way to finish (the rulebook doesn't cover this). You get a warning before a move that would do that to your own pipeline. Pipes can't be run into a cap card that's already down. Winning Moves doesn't publish its card mix, so the 110-card Original deck here is an estimate.</p>
       <div class="row end"><button type="button" class="btn primary" data-act="rules-close" data-focus>Got it</button></div>
@@ -1009,17 +1013,6 @@
     proceed(true);
   }
 
-  // Wrench cards turn into wrenches as they're drawn; tell the person when it happens to them.
-  function noteFoundWrench(g) {
-    const last = g.log[g.log.length - 1];
-    const mine = g.log.filter((l) => l.kind === 'found' && l.p === g.turn && l.n > (ui.since[g.turn] != null ? ui.since[g.turn] : -1));
-    if (!mine.length || ui.foundShown === mine[mine.length - 1].n) return;
-    ui.foundShown = mine[mine.length - 1].n;
-    toast(`${humans() > 1 ? g.players[g.turn].name + ' drew' : 'You drew'} a wrench card: +1 wrench.`);
-    sfx.repair();
-    return last;
-  }
-
   function proceed(fresh) {
     const g = G();
     if (!live()) return render();
@@ -1048,7 +1041,6 @@
       return;
     }
     ui.busy = false;
-    noteFoundWrench(g);
     if (humans() > 1 && ui.viewer !== g.turn) {
       ui.modal = { type: 'pass' };
       return render();
@@ -1234,7 +1226,7 @@
     if (m.type === 'discard') {
       ui.sel = m.cardId;
       toast(g.phase === 'wrenchDiscard' ? 'Hint: discard the highlighted card.' : 'Hint: nothing good to play. Discard the highlighted card.');
-    } else if (m.type === 'wrench') {
+    } else if (m.type === 'wrench' && !m.cardId) {
       ui.sel = null;
       ui.wrench = true;
       ui.view = g.turn;

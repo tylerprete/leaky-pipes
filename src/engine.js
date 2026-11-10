@@ -45,7 +45,7 @@
 
   // A remix found by self-play (tools/deck-search.js, tools/rules-exp.js). Same idea as the
   // original, tuned against long stretches where nobody can play: more elbows, very few T's,
-  // a few fewer leaks, and wrench cards that hand you a new wrench when you draw them.
+  // a few fewer leaks, and wrench cards: hold one in your hand and play it to fix a leak.
   const DECK_TUNED = {
     iron: { V: 7, H: 7, L1: 12, L2: 12, T1: 1, T2: 1 },
     copper: { V: 5, H: 5, L1: 10, L2: 10, T1: 1, T2: 1 },
@@ -88,7 +88,8 @@
     for (const c of spec.caps) {
       for (let k = 0; k < c.count; k++) deck.push({ id: 'c' + n++, kind: 'cap', caps: Object.assign({}, c.caps) });
     }
-    // Optional wrench cards: drawing one hands you a wrench token straight away (see drawInto).
+    // Optional wrench cards: held in hand like any card; playing one repairs your leak and the
+    // card itself is the discard, so no extra discard is needed.
     for (let k = 0; k < (spec.wrenchCards || 0); k++) deck.push({ id: 'c' + n++, kind: 'wrench' });
     return deck;
   }
@@ -397,6 +398,11 @@
       const leak = leakAt(b);
       if (leak < 0) return fail('Nothing on your pipeline is leaking.');
       if (move.i !== leak) return fail('Put the wrench on the leaking card.');
+      if (move.cardId) {
+        const c = me.hand.find((x) => x.id === move.cardId);
+        if (!c || c.kind !== 'wrench') return fail('That is not a wrench card.');
+        return { ok: true };
+      }
       if (me.wrenches <= 0) return fail('You have no wrenches left.');
       return { ok: true };
     }
@@ -405,6 +411,7 @@
     const card = me.hand.find((c) => c.id === move.cardId);
     if (!card) return fail("That card isn't in your hand.");
     if (move.type === 'discard') return { ok: true };
+    if (card.kind === 'wrench') return fail('A wrench card can only repair a leak on your own pipeline.');
 
     const tp = game.players[move.target];
     if (!tp) return fail('No such player.');
@@ -625,42 +632,19 @@
   }
 
   // ---------- game ----------
-  // Where the valves sit on the shared table. Valves on the right edge open left (W); valves on
-  // the left edge open right (E). Sizes give each pipeline room for its length plus a turn or two.
-  const LAYOUTS = {
-    // across the table from each other, offset so the lines run past each other
-    // Valves face each other across the table on (nearly) the same rows, so lines meet in the
-    // middle. Picked with self-play (tools/results/shared-*.txt): flow is as good as on separate
-    // tables, and in 3-4 player games the open ends come within two cells of each other in
-    // about half to two thirds of games. Wide, short tables also fit screens best.
-    facing: (n) => {
-      const w = n === 2 ? 15 : 17;
-      const h = n === 2 ? 9 : 11;
-      const rows = { 2: [[w - 1, 4, 'W'], [0, 4, 'E']], 3: [[w - 1, 3, 'W'], [0, 5, 'E'], [w - 1, 7, 'W']], 4: [[w - 1, 3, 'W'], [0, 3, 'E'], [w - 1, 7, 'W'], [0, 7, 'E']] }[n];
-      return { w, h, rows };
-    },
-    // everyone on the right edge, stacked, all building left: a crowded race
-    stacked: (n) => {
-      const w = 15;
-      const gap = n === 2 ? 5 : 4;
-      const h = gap * n + 3;
-      return { w, h, rows: Array.from({ length: n }, (_, i) => [w - 1, 2 + i * gap, 'W']) };
-    },
-    // valves back to back in the middle, building outward
-    center: (n) => {
-      const w = 27;
-      const h = n === 2 ? 11 : 15;
-      const c = (w - 1) / 2;
-      const rows = { 2: [[c, 5, 'W'], [c + 1, 5, 'E']], 3: [[c, 4, 'W'], [c + 1, 4, 'E'], [c, 10, 'W']], 4: [[c, 4, 'W'], [c + 1, 4, 'E'], [c, 10, 'W'], [c + 1, 10, 'E']] }[n];
-      return { w, h, rows };
-    },
-  };
-  const DEFAULT_LAYOUT = 'facing';
-  function sharedLayout(n, name) {
-    if (typeof name === 'object' && name) return name; // custom {w,h,valves}
-    const key = LAYOUTS[name] ? name : DEFAULT_LAYOUT;
-    const L = LAYOUTS[key](n);
-    return { name: key, w: L.w, h: L.h, valves: L.rows.map(([x, y, face]) => ({ x, y, face })) };
+  // The shared table has no edges: one big grid with the valves facing each other around the
+  // middle, `gap` cells apart, so lines meet in the centre but can also run round the back.
+  // Spacing picked with self-play (tools/results/shared-*.txt).
+  const SHARED = 45;
+  const SHARED_GAP = { 2: 11, 3: 11, 4: 11 };
+  function sharedLayout(n, lay) {
+    if (lay && typeof lay === 'object' && lay.valves) return lay; // custom {w,h,valves}
+    const gap = (lay && lay.gap) || SHARED_GAP[n];
+    const c = Math.floor(SHARED / 2);
+    const R = c + Math.ceil(gap / 2);
+    const L = R - gap - 1;
+    const rows = { 2: [[R, 0, 'W'], [L, 0, 'E']], 3: [[R, -2, 'W'], [L, 0, 'E'], [R, 2, 'W']], 4: [[R, -2, 'W'], [L, -2, 'E'], [R, 2, 'W'], [L, 2, 'E']] }[n];
+    return { name: 'facing', w: SHARED, h: SHARED, valves: rows.map(([x, dy, face]) => ({ x, y: c + dy, face })) };
   }
 
   function newGame(opts) {
@@ -722,25 +706,10 @@
     return game.deck.pop() || null;
   }
 
-  const MAX_WRENCHES = 3;
-  // Draw into a hand. Wrench cards become wrench tokens on the spot (up to MAX_WRENCHES),
-  // go to the discard pile so they come round again, and you draw a replacement.
-  function drawInto(game, pl, quiet) {
-    for (let guard = 0; guard < 200; guard++) {
-      const c = drawCard(game);
-      if (!c) return null;
-      if (c.kind !== 'wrench') {
-        pl.hand.push(c);
-        return c;
-      }
-      game.discard.push(c);
-      if (pl.wrenches < MAX_WRENCHES) {
-        pl.wrenches++;
-        game.found = (game.found || 0) + 1;
-        if (!quiet) log(game, (pl.name === 'You' ? 'You' : pl.name) + ' found a wrench in the pile.', 'found');
-      }
-    }
-    return null;
+  function drawInto(game, pl) {
+    const c = drawCard(game);
+    if (c) pl.hand.push(c);
+    return c;
   }
 
   function startTurn(game, noDraw) {
@@ -774,6 +743,11 @@
     if (move.type === 'wrench') {
       me.board = boardAfter(me.board, move, null, p);
       syncShared(game);
+      if (move.cardId) {
+        game.discard.push(removeFromHand(me, move.cardId));
+        log(game, who + ' fixed a leak with a wrench card.', 'repair');
+        return endTurn(game);
+      }
       me.wrenches--;
       log(game, who + ' fixed a leak with a wrench.', 'repair');
       if (!me.hand.length) return endTurn(game);
@@ -866,6 +840,10 @@
           }
         }
       });
+      if (c.kind === 'wrench') {
+        const leak = leakAt(me.board);
+        if (leak >= 0) moves.push({ type: 'wrench', cardId: c.id, i: leak, target: p });
+      }
       moves.push({ type: 'discard', cardId: c.id });
     }
     if (!onlyCardId && me.wrenches > 0) {
@@ -893,7 +871,7 @@
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, LAYOUTS, withForeignPiece,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, SHARED, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);
