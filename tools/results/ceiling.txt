@@ -1,0 +1,15 @@
+hard (today)
+A win rate 61.3% ± 7.5 (fair 50%) over 160 games, avg 47.3 turns, 0 draws, 118.1s
+cheat, same compute
+A win rate 66.3% ± 7.3 (fair 50%) over 160 games, avg 47.0 turns, 0 draws, 113.8s
+fair, 4x playouts
+A win rate 64.2% ± 8.6 (fair 50%) over 120 games, avg 46.7 turns, 0 draws, 349.3s
+cheat, deeper+wider ~5x
+A win rate 77.5% ± 7.5 (fair 50%) over 120 games, avg 48.5 turns, 0 draws, 398.1s
+done
+cheat, playouts to the end of the game
+A win rate 82.0% ± 7.5 (fair 50%) over 100 games, avg 47.3 turns, 0 draws, 322.4s
+fair, deeper+wider ~5x
+A win rate 67.5% ± 8.4 (fair 50%) over 120 games, avg 46.1 turns, 0 draws, 375.1s
+fair, playouts to the end of the game
+A win rate 52.0% ± 9.8 (fair 50%) over 100 games, avg 49.1 turns, 0 draws, 333.5s

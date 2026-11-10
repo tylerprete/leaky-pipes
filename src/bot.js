@@ -329,7 +329,7 @@
         const seed = (g.seq * 7919 + it * 104729 + p) >>> 0;
         cands.forEach((m, ci) => {
           const c = clone(g);
-          determinize(c, p, seed);
+          if (!opts.cheat) determinize(c, p, seed); // cheat: sees real hands and deck order (ceiling test only)
           let r = LP.applyMove(c, p, m);
           if (!r.ok) {
             totals[ci] -= 999;
