@@ -247,7 +247,7 @@
       return worst ? worst.id : hand[0] && hand[0].id;
     }
 
-    return { params: P, chooseMove, scoreMoves };
+    return { params: P, chooseMove, scoreMoves, fits };
   }
 
   // ---------------------------------------------------------------- search
@@ -255,7 +255,7 @@
   // randomized guesses of the hidden cards (opponents' hands and the deck), then keep the move
   // that ends up best on average. Hidden cards are re-dealt at random: no peeking.
   function makeSearchBot(overrides, opts) {
-    opts = Object.assign({ k: 5, r: 10, rounds: 3, budgetMs: 450 }, opts || {});
+    opts = Object.assign({ k: 5, r: 10, rounds: 3, budgetMs: 450, tau: 0.4, filterDepth: 1 }, opts || {});
     const base = makeBot(overrides);
     const roll = makeBot(Object.assign({}, overrides, { noise: 0.35 }));
     const P = base.params;
@@ -271,21 +271,145 @@
     function determinize(g, p, seed) {
       let s = seed >>> 0;
       const rand = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+      const shuffle = (a) => {
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(rand() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      };
+      if (opts.cheat === 'hands') {
+        // ceiling test only: knows the real hands, not the deck order
+        g.deck = shuffle(g.deck.slice());
+        g.rng = (seed * 2654435761) >>> 0;
+        return;
+      }
       const pool = g.deck.slice();
       g.players.forEach((pl, i) => {
         if (i !== p) pool.push(...pl.hand);
       });
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(rand() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
+      shuffle(pool);
       g.players.forEach((pl, i) => {
-        if (i !== p) {
-          pl.hand = pool.splice(0, pl.hand.length);
+        if (i === p) return;
+        const n = pl.hand.length;
+        const parts = g._parts && g._parts[i];
+        if (parts) {
+          // pick a believed hand in proportion to how well it explains what this player did
+          for (let tries = 0; tries < 6; tries++) {
+            let x = rand() * parts.total;
+            let pick = parts.list[parts.list.length - 1];
+            for (const q of parts.list) if ((x -= q.w) <= 0) { pick = q; break; }
+            const idx = pick.hand.map((c) => pool.indexOf(c));
+            if (idx.some((k) => k < 0)) continue; // overlaps a hand already dealt
+            idx.sort((a, b) => b - a).forEach((k) => pool.splice(k, 1));
+            pl.hand = pick.hand.slice();
+            return;
+          }
         }
+        const no = opts.infer ? unlikely(pl) : null;
+        if (!no) {
+          pl.hand = pool.splice(0, n);
+          return;
+        }
+        // deal around the cards this player has shown they probably don't hold
+        const hand = [];
+        for (let k = 0; k < pool.length && hand.length < n; ) {
+          if (no(pool[k]) && rand() < opts.infer && pool.length - k > n - hand.length) k++;
+          else hand.push(pool.splice(k, 1)[0]);
+        }
+        while (hand.length < n && pool.length) hand.push(pool.shift());
+        pl.hand = hand;
       });
+      shuffle(pool);
       g.deck = pool;
       g.rng = (seed * 2654435761) >>> 0;
+    }
+    // ---- belief about opponents' hands ----
+    // Sample many hands an opponent could hold, and weight each by how likely a sensible player
+    // holding it would have done what they just did (and, optionally, the turn before).
+    const sameMv = (a, b) => a.type === b.type && a.cardId === b.cardId && a.target === b.target && a.i === b.i && !!a.flip === !!b.flip;
+    function actLikelihood(g, o, act, hand) {
+      const fake = Object.assign({}, g, {
+        turn: o,
+        phase: 'play',
+        players: g.players.map((pl, i) => Object.assign({}, pl, { board: act.boards[i], wrenches: act.wr[i], hand: i === o ? hand : pl.hand })),
+      });
+      const sc = base.scoreMoves(fake, o);
+      let max = -Infinity;
+      let obs = null;
+      for (const x of sc) {
+        if (x.score > max) max = x.score;
+        if (obs == null && sameMv(x.m, act.move)) obs = x.score;
+      }
+      if (obs == null) return 0.02;
+      return Math.max(0.02, Math.exp((obs - max) / opts.tau));
+    }
+    function buildParticles(g, p, seed) {
+      let s = (seed ^ 0x9e3779b9) >>> 0;
+      const rand = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+      const pool = g.deck.slice();
+      g.players.forEach((pl, i) => {
+        if (i !== p) pool.push(...pl.hand);
+      });
+      const out = {};
+      g.players.forEach((pl, o) => {
+        const a = pl.lastAct;
+        if (o === p || !a || !a.boards || pl.hand.length === 0 || pool.length <= pl.hand.length) return;
+        const n = pl.hand.length;
+        const list = [];
+        let total = 0;
+        for (let k = 0; k < opts.filter; k++) {
+          // partial shuffle: n random cards from the pool
+          for (let j = 0; j < n; j++) {
+            const r = j + Math.floor(rand() * (pool.length - j));
+            [pool[j], pool[r]] = [pool[r], pool[j]];
+          }
+          const hand = pool.slice(0, n);
+          const then = hand.concat(a.card ? [a.card] : [], a.dropped ? [a.dropped] : []);
+          let w = actLikelihood(g, o, a, then);
+          const b = pl.prevAct;
+          if (opts.filterDepth > 1 && b && b.boards && w > 0.05) {
+            // the turn before: one of today's cards was drawn since, we don't know which
+            const base6 = hand.concat(a.card ? [a.card] : [], a.dropped ? [a.dropped] : []);
+            let acc = 0;
+            for (let d = 0; d < base6.length; d++) {
+              const h2 = base6.filter((_, q) => q !== d).concat(b.card ? [b.card] : [], b.dropped ? [b.dropped] : []);
+              acc += actLikelihood(g, o, b, h2);
+            }
+            w *= acc / base6.length;
+          }
+          list.push({ hand, w });
+          total += w;
+        }
+        out[o] = { list, total };
+      });
+      return out;
+    }
+
+    // Reading an opponent's last turn. Every card they hold now was in their hand when they
+    // chose, so: sitting on a leak means no wrench card and no matching cover; discarding with a
+    // clean pipeline means none of their good pipes fit it.
+    function unlikely(pl) {
+      const a = pl.lastAct;
+      if (!a) return null;
+      const b = a.board;
+      const leak = LP.leakAt(b);
+      if (leak >= 0) {
+        if (a.type === 'wrench' || (a.type === 'cover' && a.own)) return null;
+        const piece = b.cells[leak];
+        return (c) => {
+          if (c.kind === 'wrench') return true;
+          if (piece.card.kind === 'cap') return c.kind === 'cap' && !LP.capHasLeak(c);
+          return c.kind === 'pipe' && LP.coversLeak(b, leak, c);
+        };
+      }
+      if (a.type !== 'discard' && a.type !== 'pass') return null;
+      const memo = new Map();
+      return (c) => {
+        if (c.kind !== 'pipe' || c.mat === 'leaky') return false;
+        if (!memo.has(c.shape)) memo.set(c.shape, base.fits(b, c));
+        return memo.get(c.shape);
+      };
     }
     function evaluate(g, p) {
       if (g.phase === 'over') return g.winner === p ? 50 : g.winner >= 0 ? -50 : 0;
@@ -321,6 +445,7 @@
       const t0 = Date.now();
       const cands = candidates(g, p);
       if (cands.length <= 1) return cands[0] || base.chooseMove(g, p);
+      if (opts.filter) g = Object.assign({}, g, { _parts: buildParticles(g, p, g.seq * 31 + p) });
       const totals = cands.map(() => 0);
       let n = 0;
       const plies = opts.rounds * g.players.length;
@@ -355,7 +480,7 @@
     function sameMove(a, b) {
       return a.type === b.type && a.cardId === b.cardId && a.target === b.target && a.i === b.i && !!a.flip === !!b.flip;
     }
-    return { params: P, chooseMove, search: true };
+    return { params: P, chooseMove, search: true, buildParticles };
   }
 
   const LEVELS = {

@@ -1,0 +1,17 @@
+knows hands only, same compute
+A win rate 67.0% ± 5.3 (fair 50%) over 300 games, avg 47.3 turns, 0 draws, 249.6s
+inference 0.9, same compute
+A win rate 69.3% ± 5.2 (fair 50%) over 300 games, avg 46.9 turns, 0 draws, 247.7s
+hard, same seeds
+A win rate 68.0% ± 5.3 (fair 50%) over 300 games, avg 47.7 turns, 0 draws, 267.3s
+done
+deep 5x, knows hands only
+A win rate 78.9% ± 6.0 (fair 50%) over 180 games, avg 47.4 turns, 0 draws, 676.4s
+deep 5x, fair
+A win rate 57.2% ± 7.2 (fair 50%) over 180 games, avg 49.5 turns, 0 draws, 711.0s
+deep 5x, inference 0.9
+A win rate 61.1% ± 7.1 (fair 50%) over 180 games, avg 47.6 turns, 0 draws, 677.6s
+deep 5x, sees everything
+Terminated
+deep 5x, belief (60 sampled hands, last move)
+A win rate 64.4% ± 7.0 (fair 50%) over 180 games, avg 47.5 turns, 0 draws, 726.5s

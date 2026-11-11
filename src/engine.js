@@ -112,6 +112,11 @@
   function isGoodPipe(card) {
     return card.kind === 'pipe' && card.mat !== 'leaky';
   }
+  // Could this good pipe go over the leaking pipe at cell i (either way up)?
+  function coversLeak(b, i, card) {
+    const t = b.cells[i];
+    return !!t && isGoodPipe(card) && [false, true].some((f) => sameSet(openingsOf(card, f), pieceOpenings(t)));
+  }
   function capHasLeak(card) {
     return card.kind === 'cap' && DIRS.some((d) => card.caps[d] === 'leaky');
   }
@@ -730,6 +735,22 @@
     if (!chk.ok) return chk;
     const me = game.players[p];
     const who = me.name;
+    // What everyone at the table saw: the board this player faced and what they chose to do.
+    // (Boards are never mutated, so keeping the reference is free.) Used by the Hard bot to
+    // reason about what the player is probably holding.
+    if (game.phase === 'play') {
+      me.prevAct = me.lastAct;
+      me.lastAct = {
+        type: move.type,
+        own: move.target == null || move.target === p,
+        move,
+        card: move.cardId ? me.hand.find((c) => c.id === move.cardId) : null,
+        board: me.board,
+        wrenches: me.wrenches,
+        boards: game.players.map((q) => q.board),
+        wr: game.players.map((q) => q.wrenches),
+      };
+    } else if (game.phase === 'wrenchDiscard' && me.lastAct) me.lastAct.dropped = me.hand.find((c) => c.id === move.cardId);
     if (move.type === 'discard') {
       const c = removeFromHand(me, move.cardId);
       game.discard.push(c);
@@ -871,7 +892,7 @@
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, SHARED, withForeignPiece,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, SHARED, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);

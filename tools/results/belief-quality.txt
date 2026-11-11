@@ -1,0 +1,6 @@
+no inference         vs v2: overlap 1.65/5   error (lower is better): holds a leaky pipe 0.106, holds a wrench card 0.265, holds a cap 0.256
+last 1 move(s) read  vs v2: overlap 1.73/5   error (lower is better): holds a leaky pipe 0.100, holds a wrench card 0.261, holds a cap 0.248
+last 2 move(s) read  vs v2: overlap 1.78/5   error (lower is better): holds a leaky pipe 0.097, holds a wrench card 0.257, holds a cap 0.247
+no inference         vs v1: overlap 1.63/5   error (lower is better): holds a leaky pipe 0.189, holds a wrench card 0.385, holds a cap 0.273
+last 1 move(s) read  vs v1: overlap 1.71/5   error (lower is better): holds a leaky pipe 0.190, holds a wrench card 0.389, holds a cap 0.258
+last 2 move(s) read  vs v1: overlap 1.73/5   error (lower is better): holds a leaky pipe 0.195, holds a wrench card 0.391, holds a cap 0.251

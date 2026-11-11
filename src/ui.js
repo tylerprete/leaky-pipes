@@ -268,7 +268,7 @@
   // ---------------------------------------------------------------- persistence
   function save() {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ game: ui.game, seats: ui.seats, viewer: ui.viewer, level: ui.level, since: ui.since }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ game: ui.game, seats: ui.seats, viewer: ui.viewer, level: ui.level, since: ui.since }, (k, v) => (k === 'lastAct' || k === 'prevAct' ? undefined : v)));
     } catch (e) {
       /* storage unavailable: play on without saving */
     }
