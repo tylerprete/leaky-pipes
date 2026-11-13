@@ -8,8 +8,8 @@
     "test": "node test/engine.test.js",
     "sim": "node test/sim.js 40",
     "server": "node server/server.js",
-    "cf:dev": "wrangler dev -c cloudflare/wrangler.jsonc",
-    "cf:deploy": "wrangler deploy -c cloudflare/wrangler.jsonc"
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy"
   },
   "license": "UNLICENSED",
   "dependencies": {

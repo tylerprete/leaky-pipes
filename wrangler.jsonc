@@ -1,12 +1,14 @@
 // Leaky Pipes on Cloudflare: one Worker plus one Durable Object class (a room per game).
+// It lives at the repository root so `npx wrangler deploy` works with no arguments, which is
+// what Cloudflare's Git-connected builds run by default. Details: cloudflare/README.md
 //   npx wrangler dev      run locally at http://localhost:8787
 //   npx wrangler deploy   publish to your account
 {
   "name": "leaky-pipes",
-  "main": "worker.js",
+  "main": "cloudflare/worker.js",
   "compatibility_date": "2025-09-01",
   // the built game page; the Worker runs first so it can point the page at itself
-  "assets": { "directory": "../docs", "binding": "ASSETS", "run_worker_first": true },
+  "assets": { "directory": "./docs", "binding": "ASSETS", "run_worker_first": true },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "GameRoom" }] },
   // SQLite-backed storage: the only kind available on the free plan
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],

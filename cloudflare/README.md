@@ -24,7 +24,16 @@ npm run cf:dev         # http://localhost:8787
 
 Open it in two windows and use Play online. `node test/online.js` with `ONLINE_URL=http://localhost:8787/` plays a full game against it, and `node test/cf-restart.js` checks that a room survives a restart.
 
-## Deploy
+## Deploy from GitHub (recommended)
+
+Cloudflare builds and deploys on every push to `main`.
+
+1. In the Cloudflare dashboard, go to Workers & Pages, choose Create, then import a repository.
+2. Authorize the Cloudflare GitHub app for `tylerprete/leaky-pipes` and select it.
+3. Keep the project name `leaky-pipes` (it must match `name` in `wrangler.jsonc`), the root directory empty, and the deploy command `npx wrangler deploy`. No build command is needed: the built page in `docs/` is committed.
+4. If asked, pick your `workers.dev` subdomain. It becomes part of the public address.
+
+## Deploy from your machine
 
 ```
 npx wrangler login     # once, opens a browser
@@ -41,7 +50,7 @@ LEAKY_SERVER=wss://leaky-pipes.<your-subdomain>.workers.dev npm run build
 git commit -am "Point the page at the game server" && git push
 ```
 
-## Settings (`wrangler.jsonc` > `vars`)
+## Settings (`wrangler.jsonc` at the repository root, under `vars`)
 
 - `MAX_LEVEL` (default `normal`): the strongest computer level a room may use. Hard runs a look-ahead that takes hundreds of milliseconds of CPU per move, far over the free plan's per-request CPU limit. Set it to `hard` only on the paid plan.
 - `BOT_MS` (900): pause before a computer moves.

@@ -8,7 +8,7 @@ const B = require('../src/bot.js');
 const PORT = 8789;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const start = async () => {
-  const p = spawn('npx', ['wrangler', 'dev', '--port', PORT, '--var', 'BOT_MS:50'], { cwd: __dirname + '/../cloudflare', stdio: 'ignore', detached: true });
+  const p = spawn('npx', ['wrangler', 'dev', '--port', PORT, '--var', 'BOT_MS:50'], { cwd: __dirname + '/..', stdio: 'ignore', detached: true });
   for (let k = 0; k < 60; k++) {
     await sleep(500);
     try { if ((await fetch(`http://localhost:${PORT}/health`)).ok) return p; } catch (e) { /* not up yet */ }
