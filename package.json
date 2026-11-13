@@ -7,10 +7,15 @@
     "build": "node build.js",
     "test": "node test/engine.test.js",
     "sim": "node test/sim.js 40",
-    "server": "node server/server.js"
+    "server": "node server/server.js",
+    "cf:dev": "wrangler dev -c cloudflare/wrangler.jsonc",
+    "cf:deploy": "wrangler deploy -c cloudflare/wrangler.jsonc"
   },
   "license": "UNLICENSED",
   "dependencies": {
     "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.161.0"
   }
 }

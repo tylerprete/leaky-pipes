@@ -17,7 +17,12 @@ Play it at https://tylerprete.github.io/leaky-pipes/ (GitHub Pages serves `docs/
 
 ## Online play
 
-Games against computers and pass-and-play need nothing but the static page. Playing across browsers needs the small game server in `server/`:
+Games against computers and pass-and-play need nothing but the static page. Playing across browsers needs a game server. There are two hosts for the same room logic (`server/room.js`):
+
+- **Cloudflare Workers** (`cloudflare/`): a Worker plus a Durable Object per room. No machine to run, and rooms survive restarts. See `cloudflare/README.md`.
+- **Node** (`server/server.js`): one process for a VM or container. See `deploy/README.md`.
+
+The Node server, locally:
 
 ```
 npm install
@@ -28,7 +33,7 @@ npm run server        # http://localhost:8787 serves the page and the game socke
 - The server runs the same rules engine, checks every move, plays computer seats, and sends each player only their own hand.
 - One person creates a game and shares the 4-letter code or invite link. Up to 4 seats, any mix of people and computers.
 - A dropped player keeps their seat: reopening the page resumes it. After 30 seconds away on their turn, a computer plays for them until they return.
-- Games live in memory, so restarting the server ends them. Run a single instance.
+- On the Node server, games live in memory, so a restart ends them and it must run as a single instance. The Cloudflare version saves each room and has neither limit.
 - Deploy anywhere that runs a container and allows WebSockets. `deploy/` has a ready setup (Docker Compose with Caddy for HTTPS) and step-by-step notes for a free Oracle Cloud instance.
 - To make the GitHub Pages copy offer online play, bake the address in: `LEAKY_SERVER=wss://your-host npm run build`. A `?server=wss://your-host` link also works without rebuilding.
 - Settings: `PORT`, `MAX_ROOMS` (500), `AWAY_MS` (30000), `BOT_MS` (900).
@@ -40,7 +45,8 @@ Test: `node test/online.js` plays a full game with two browsers and a computer, 
 - `src/engine.js`: rules engine (placement, leaks, repairs, T's and caps, spout, dead-end analysis, shared-table rules)
 - `src/bot.js`: computer players. A heuristic scorer (Easy/Normal) and a lookahead search (Hard).
 - `src/ui.js`, `src/style.css`, `src/page.html`: the single-page game
-- `server/server.js`: the online game server (rooms, hidden hands, reconnects)
+- `server/room.js`: the online room logic (seats, hidden hands, computer seats, reconnects)
+- `server/server.js`, `cloudflare/worker.js`: the two hosts for it
 - `bots/v1.js`: the first bot, kept as a baseline
 - `tools/arena.js`: self-play arena (seat-rotated matches with confidence intervals). Env: `TABLE`, `DECK`, `LAYOUT`.
 - `tools/tune.js`: weight tuner (self-play evolution)

@@ -636,6 +636,39 @@
     return r || exhausted;
   }
 
+  // ---------- compact form for sending and storing ----------
+  // Boards are mostly empty, so cells travel as {index: piece}. The shared-table bookkeeping
+  // and the bots' notes on past actions are dropped and rebuilt on arrival.
+  function packGame(game) {
+    return Object.assign({}, game, {
+      players: game.players.map((pl) => {
+        const cells = {};
+        pl.board.cells.forEach((c, i) => {
+          if (c) cells[i] = c;
+        });
+        const board = Object.assign({}, pl.board, { cells });
+        delete board.foreign;
+        delete board.reserved;
+        const out = Object.assign({}, pl, { board });
+        delete out.lastAct;
+        delete out.prevAct;
+        return out;
+      }),
+    });
+  }
+  function unpackGame(packed) {
+    const game = Object.assign({}, packed, {
+      players: packed.players.map((pl) => {
+        const b = pl.board;
+        const cells = new Array(b.w * b.h).fill(null);
+        for (const k of Object.keys(b.cells)) cells[+k] = b.cells[k];
+        return Object.assign({}, pl, { board: Object.assign({}, b, { cells }) });
+      }),
+    });
+    syncShared(game);
+    return game;
+  }
+
   // ---------- game ----------
   // The shared table has no edges: one big grid with the valves facing each other around the
   // middle, `gap` cells apart, so lines meet in the centre but can also run round the back.
@@ -892,7 +925,7 @@
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, SHARED, withForeignPiece,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, packGame, unpackGame, SHARED, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);

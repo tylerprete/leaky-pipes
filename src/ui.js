@@ -1653,7 +1653,8 @@
     const n = (ui.net = Object.assign(ui.net || { room: null, tries: 0 }, { status: 'connecting', first }));
     let ws;
     try {
-      ws = new WebSocket(serverUrl());
+      // the address carries the room so a host that keeps each room separately can route it
+      ws = new WebSocket(serverUrl() + '/ws?' + (first.t === 'create' ? 'create=1' : 'room=' + encodeURIComponent(first.code || '')));
     } catch (e) {
       n.status = 'failed';
       return render();
@@ -1740,7 +1741,7 @@
     }
     if (m.t === 'state') {
       const prev = ui.game;
-      const g = m.game;
+      const g = LP.unpackGame(m.game);
       const seat = n.room ? n.room.seat : 0;
       const fresh = !n.gotState || !prev || g.seq < prev.seq || g.turns < prev.turns;
       const stillOver = !fresh && prev.phase === 'over' && g.phase === 'over';

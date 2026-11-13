@@ -3,9 +3,10 @@
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const PORT = 8799;
-const URL = `http://localhost:${PORT}/`;
+const URL = process.env.ONLINE_URL || `http://localhost:${PORT}/`;
 (async () => {
-  const srv = spawn('node', [__dirname + '/../server/server.js'], { env: Object.assign({}, process.env, { PORT, BOT_MS: 60, AWAY_MS: 1500 }), stdio: 'inherit' });
+  // ONLINE_URL=http://localhost:8788/ tests a server that is already running (e.g. wrangler dev)
+  const srv = process.env.ONLINE_URL ? { kill() {} } : spawn('node', [__dirname + '/../server/server.js'], { env: Object.assign({}, process.env, { PORT, BOT_MS: 60, AWAY_MS: 1500 }), stdio: 'inherit' });
   await new Promise((r) => setTimeout(r, 700));
   const browser = await chromium.launch();
   const errs = [];
