@@ -1,0 +1,22 @@
+hard + learned eval
+A win rate 56.0% ± 5.6 (fair 50%) over 300 games, avg 46.8 turns, 0 draws, 260.2s
+learned eval, 1 round look-ahead, 30 deals
+A win rate 53.7% ± 5.6 (fair 50%) over 300 games, avg 46.1 turns, 0 draws, 303.0s
+hard + linear learned eval
+A win rate 50.0% ± 5.7 (fair 50%) over 300 games, avg 46.3 turns, 0 draws, 267.5s
+--- after fixing a divide-by-zero in the evaluation (rows above this line are invalid)
+hard + learned eval (network)
+A win rate 59.7% ± 5.6 (fair 50%) over 300 games, avg 45.5 turns, 0 draws, 269.2s
+hard + learned eval (linear)
+A win rate 60.3% ± 5.5 (fair 50%) over 300 games, avg 45.4 turns, 0 draws, 268.5s
+hard + hand-aware hand-tuned eval
+A win rate 58.0% ± 5.6 (fair 50%) over 300 games, avg 46.6 turns, 0 draws, 291.4s
+hard + 50/50 blend of today's eval and the network
+A win rate 65.3% ± 5.4 (fair 50%) over 300 games, avg 47.2 turns, 0 draws, 303.7s
+hard + learned eval, board-only features (network)
+A win rate 63.3% ± 5.5 (fair 50%) over 300 games, avg 47.3 turns, 0 draws, 268.6s
+
+Reference on the same 150 seeds (tools/results/ceiling-hands.txt): Hard with today's evaluation 68.0% +- 5.3.
+Prediction quality on held-out games (log loss, lower is better; 24k games, 1.1M positions):
+  guess 1/players 0.6374 | today's evaluation refit 0.6101 | linear, all features 0.5985 | network 0.5861 | board-only network 0.5921
+To use a trained evaluation: LP_VALUE_FILE=/abs/path/tools/results/value-net.js with search opts {"value":true}.

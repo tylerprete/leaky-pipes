@@ -1342,6 +1342,29 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 (function (root) {
   'use strict';
   const LP = typeof module !== 'undefined' && module.exports ? require('./engine.js') : root.LP;
+  let VALUE = null;
+  try {
+    VALUE = typeof module !== 'undefined' && module.exports ? (process.env.LP_VALUE_FILE ? require(process.env.LP_VALUE_FILE) : null) : root.LP_VALUE;
+  } catch (e) {
+    VALUE = null;
+  }
+  // tiny feed-forward network: ReLU hidden layers, sigmoid out
+  function netWinProb(x) {
+    let a = x.map((v, i) => (VALUE.sd[i] > 1e-3 ? (v - VALUE.mu[i]) / VALUE.sd[i] : 0));
+    for (let l = 0; l < VALUE.W.length; l++) {
+      const W = VALUE.W[l];
+      const b = VALUE.b[l];
+      const o = new Array(W.length);
+      for (let j = 0; j < W.length; j++) {
+        let t = b[j];
+        const w = W[j];
+        for (let i = 0; i < a.length; i++) t += w[i] * a[i];
+        o[j] = l === VALUE.W.length - 1 ? t : t > 0 ? t : 0;
+      }
+      a = o;
+    }
+    return 1 / (1 + Math.exp(-a[0]));
+  }
 
   const PARAMS = {
     fit: 0.6, // value of holding cards that can extend the pipeline next turn
@@ -1436,6 +1459,64 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       if (openEnds > 1 && hand.some((c) => c.kind === 'cap' && !LP.capHasLeak(c))) v += P.capHeld;
       if (openEnds > 1) v -= P.tPenalty;
       return v;
+    }
+
+    // ---- features for the learned evaluation (tools/train-value.py) ----
+    // Describes one player's standing using their board AND their hand. In the Hard bot's
+    // look-ahead every hand is filled in (a guessed deal), so this is fair to use there.
+    const SIDE = 13;
+    function sideFeatures(game, i, p) {
+      const pl = game.players[i];
+      const b = pl.board;
+      const hand = pl.hand;
+      const cost = analyzeCost(game, b);
+      const dead = cost >= CAP;
+      const leak = LP.leakAt(b);
+      const wcards = hand.filter((c) => c.kind === 'wrench').length;
+      let canFix = 0;
+      if (leak >= 0) {
+        const piece = b.cells[leak];
+        const cover = hand.some((c) => (piece.card.kind === 'pipe' ? c.kind === 'pipe' && c.mat !== 'leaky' && sameShapeAs(c, piece) : c.kind === 'cap' && !LP.capHasLeak(c)));
+        canFix = cover || wcards || pl.wrenches > 0 ? 1 : 0;
+      }
+      let fit = 0;
+      for (const c of hand) if (c.kind === 'pipe' && c.mat !== 'leaky' && LP.SHAPE_KIND[c.shape] !== 'T' && fits(b, c)) fit++;
+      const last = b.cells[b.last];
+      const ends = LP.openEnds(b).length;
+      const n = game.players.length;
+      return [
+        dead ? 14 : Math.min(cost, 14),
+        dead ? 1 : 0,
+        leak >= 0 ? 1 : 0,
+        canFix,
+        pl.wrenches,
+        wcards,
+        fit,
+        hand.filter((c) => c.kind === 'pipe' && c.mat === 'leaky').length,
+        hand.some((c) => c.kind === 'cap' && !LP.capHasLeak(c)) ? 1 : 0,
+        ends > 1 ? 1 : 0,
+        dead ? 0 : Math.log2(1 + Math.min(16, freeAround(b))),
+        last && last.card.kind === 'pipe' && last.card.mat === 'iron' && !last.repaired ? 1 : 0,
+        ((i - game.turn + n) % n) / n + (i === game.turn && game.phase === 'wrenchDiscard' ? 0.5 : 0),
+      ];
+    }
+    // me, then my most dangerous opponent, then the table
+    function features(game, p) {
+      const n = game.players.length;
+      let rival = -1;
+      let rivalV = -Infinity;
+      let second = 14;
+      const vals = game.players.map((pl, i) => (i === p ? null : theirValue(game, i, pl.board)));
+      vals.forEach((v, i) => {
+        if (i !== p && v > rivalV) {
+          rivalV = v;
+          rival = i;
+        }
+      });
+      game.players.forEach((pl, i) => {
+        if (i !== p && i !== rival) second = Math.min(second, Math.min(14, analyzeCost(game, pl.board)));
+      });
+      return sideFeatures(game, p, p).concat(sideFeatures(game, rival, p), [n === 2 ? 1 : 0, n === 3 ? 1 : 0, n === 4 ? 1 : 0, second, game.deck.length / 100]);
     }
 
     function theirValue(game, t, b) {
@@ -1579,7 +1660,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       return worst ? worst.id : hand[0] && hand[0].id;
     }
 
-    return { params: P, chooseMove, scoreMoves, fits };
+    return { params: P, chooseMove, scoreMoves, fits, features, myValue };
   }
 
   // ---------------------------------------------------------------- search
@@ -1744,7 +1825,28 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       };
     }
     function evaluate(g, p) {
+      if (opts.value && VALUE) {
+        if (g.phase === 'over') return g.winner === p ? 1 : g.winner >= 0 ? 0 : 0.5 / g.players.length;
+        return netWinProb(base.features(g, p));
+      }
       if (g.phase === 'over') return g.winner === p ? 50 : g.winner >= 0 ? -50 : 0;
+      if (opts.leaf === 'hand') {
+        // same scale as below, but each side is judged with its (dealt) hand too
+        const hv = (i) => base.myValue(g, i, g.players[i].board, g.players[i].hand, g.players[i].wrenches);
+        let best = -Infinity;
+        g.players.forEach((_, i) => {
+          if (i !== p) best = Math.max(best, hv(i));
+        });
+        return hv(p) - best;
+      }
+      if (opts.leaf === 'mix' && VALUE) {
+        // today's evaluation nudged by the learned win chance (in log-odds, ~0.3 per card)
+        const w = Math.min(0.98, Math.max(0.02, netWinProb(base.features(g, p))));
+        return (1 - opts.mix) * evalOld(g, p) + opts.mix * (Math.log(w / (1 - w)) / 0.31);
+      }
+      return evalOld(g, p);
+    }
+    function evalOld(g, p) {
       const cost = (b) => {
         const a = LP.analyze(b, g.required);
         return a.viable ? a.cost : CAP;
