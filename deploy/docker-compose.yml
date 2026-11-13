@@ -1,0 +1,32 @@
+# Leaky Pipes game server behind Caddy (automatic HTTPS).
+#   cd deploy && cp .env.example .env   # set DOMAIN
+#   docker compose up -d --build
+services:
+  app:
+    build:
+      context: ..
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+    expose:
+      - "8787"
+    mem_limit: 512m
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

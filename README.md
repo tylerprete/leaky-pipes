@@ -29,7 +29,7 @@ npm run server        # http://localhost:8787 serves the page and the game socke
 - One person creates a game and shares the 4-letter code or invite link. Up to 4 seats, any mix of people and computers.
 - A dropped player keeps their seat: reopening the page resumes it. After 30 seconds away on their turn, a computer plays for them until they return.
 - Games live in memory, so restarting the server ends them. Run a single instance.
-- Deploy anywhere that runs a container and allows WebSockets (`Dockerfile` included). Put it behind HTTPS so the page can use `wss://`.
+- Deploy anywhere that runs a container and allows WebSockets. `deploy/` has a ready setup (Docker Compose with Caddy for HTTPS) and step-by-step notes for a free Oracle Cloud instance.
 - To make the GitHub Pages copy offer online play, bake the address in: `LEAKY_SERVER=wss://your-host npm run build`. A `?server=wss://your-host` link also works without rebuilding.
 - Settings: `PORT`, `MAX_ROOMS` (500), `AWAY_MS` (30000), `BOT_MS` (900).
 
