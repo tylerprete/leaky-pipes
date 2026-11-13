@@ -7,6 +7,10 @@
   "name": "leaky-pipes",
   "main": "cloudflare/worker.js",
   "compatibility_date": "2025-09-01",
+  "workers_dev": true, // serve at leaky-pipes.<subdomain>.workers.dev
+  "preview_urls": false,
+  // keep request logs and errors so problems on the live Worker can be looked up afterwards
+  "observability": { "enabled": true },
   // the built game page; the Worker runs first so it can point the page at itself
   "assets": { "directory": "./docs", "binding": "ASSETS", "run_worker_first": true },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "GameRoom" }] },
