@@ -382,3 +382,14 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   .chips .chip .nm small { display: none; }
   .chips .chip .dot { margin-right: 4px; }
 }
+
+/* ---------- online lobby ---------- */
+.online .field { display: grid; gap: 4px; margin: 10px 0; font-size: 13px; color: var(--muted); }
+.online input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: #141c22; color: var(--ink); font: 500 16px/1.2 var(--body); }
+.online input:focus-visible { outline: 2px solid var(--water); outline-offset: 1px; }
+.online .joinrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.online #net-code { font: 600 22px/1 var(--display); letter-spacing: .3em; text-transform: uppercase; text-align: center; }
+.online h2 .code { letter-spacing: .18em; }
+.netseat { grid-template-columns: auto 1fr auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: #1d272f; }
+.netseat .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.netseat small { font: 600 11px/1 var(--body); color: var(--muted); margin-left: 6px; }

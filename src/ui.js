@@ -267,6 +267,7 @@
 
   // ---------------------------------------------------------------- persistence
   function save() {
+    if (ui.net) return; // online games live on the server
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({ game: ui.game, seats: ui.seats, viewer: ui.viewer, level: ui.level, since: ui.since }, (k, v) => (k === 'lastAct' || k === 'prevAct' ? undefined : v)));
     } catch (e) {
@@ -496,7 +497,7 @@
       g.winner === i ? '<span class="tag-win">winner</span>' : '',
       playing ? '<span class="thinking"><i></i><i></i><i></i></span>' : '',
     ].join('');
-    return `<span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(you && opts.main ? 'Your pipeline' : pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}</span>
+    return `<span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(you && opts.main ? 'Your pipeline' : pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}${pl.away ? ' <small>away</small>' : ''}</span>
       <span class="ct">${prog}<small>/${g.required}</small></span>
       <span class="bar"><i style="width:${(100 * prog) / g.required}%;background:${PCOLOR[i % 4]}"></i></span>
       <span class="tags">${tags}</span>`;
@@ -812,6 +813,7 @@
     else if (m.type === 'rules') o.innerHTML = rulesHTML();
     else if (m.type === 'menu') o.innerHTML = menuHTML();
     else if (m.type === 'log') o.innerHTML = logHTML();
+    else if (m.type === 'online') o.innerHTML = onlineHTML();
     o.className = 'show-' + m.type;
     const first = o.querySelector('[data-focus]') || o.querySelector('button');
     if (first && !o.contains(document.activeElement)) first.focus({ preventScroll: true });
@@ -854,6 +856,7 @@
       <p>Race to pipe water from your valve to your spout while everyone else springs leaks in your line. Classic Waterworks rules for 2 to 4 players.</p>
       ${canResume ? `<div class="row"><button type="button" class="btn primary" data-act="resume" data-focus>Resume saved game</button></div>` : ''}
       ${inGame ? `<div class="row"><button type="button" class="btn" data-act="close">Back to the current game</button></div>` : ''}
+      ${serverUrl() && !inGame ? `<div class="row"><button type="button" class="btn" data-act="online">Play online with friends</button></div>` : ''}
       <h3>Players</h3>
       ${seats}
       <div class="row">${s.length < 4 ? '<button type="button" class="btn" data-act="add-seat">Add a player</button>' : ''}</div>
@@ -924,8 +927,8 @@
       <table class="stats"><thead><tr><th></th><th>Pipes</th><th>Leaks sprung</th><th>Leaks taken</th><th>Repairs</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="row end">
         <button type="button" class="btn" data-act="see-board">Look at the table</button>
-        <button type="button" class="btn" data-act="setup">Change players</button>
-        <button type="button" class="btn primary" data-act="again" data-focus>Play again</button>
+        <button type="button" class="btn" data-act="setup">${ui.net ? 'Leave' : 'Change players'}</button>
+        ${ui.net && !netHost() ? '<button type="button" class="btn primary" disabled>Waiting for the host</button>' : '<button type="button" class="btn primary" data-act="again" data-focus>Play again</button>'}
       </div>
     </div>`;
   }
@@ -936,7 +939,7 @@
       <div class="row">
         <button type="button" class="btn" data-act="rules">How to play</button>
         <button type="button" class="btn" data-act="log">Game log</button>
-        <button type="button" class="btn" data-act="setup">New game</button>
+        <button type="button" class="btn" data-act="setup">${ui.net ? 'Leave game' : 'New game'}</button>
         <button type="button" class="btn primary" data-act="close" data-focus>Back to the game</button>
       </div>
       <p class="muted">Shortcuts: 1–6 pick a card, R turns it, D discards, W wrench, H hint.</p>
@@ -990,6 +993,7 @@
 
   // ---------------------------------------------------------------- game flow
   function startGame(seats) {
+    if (ui.net) netLeave(); // a local game replaces any online one
     ui.gen++;
     const players = seats.map((s, i) => ({ name: (s.name || '').trim() || (s.kind === 'bot' ? BOT_NAMES[i % 3] : 'Player ' + (i + 1)), kind: s.kind }));
     ui.game = LP.newGame({ players, table: ui.table, deck: ui.deck });
@@ -1029,6 +1033,15 @@
         render();
       }, REDUCED ? 200 : 2600);
       return;
+    }
+    if (ui.net) {
+      // online: the server moves everyone else; just wait for my turn
+      ui.busy = g.turn !== ui.viewer;
+      if (ui.busy) {
+        ui.sel = null;
+        ui.wrench = false;
+      }
+      return render();
     }
     const cur = g.players[g.turn];
     if (cur.kind === 'bot') {
@@ -1097,6 +1110,17 @@
   function play(m) {
     const g = G();
     const p = g.turn;
+    if (ui.net) {
+      netSend({ t: 'move', move: m });
+      if (m.cardId) delete ui.flips[m.cardId];
+      ui.sel = null;
+      ui.wrench = false;
+      ui.hint = null;
+      ui.botMark = null;
+      ui.focus = null;
+      ui.busy = true; // until the server answers
+      return render();
+    }
     const r = LP.applyMove(g, p, m);
     if (!r.ok) {
       sfx.nope();
@@ -1216,7 +1240,8 @@
   function showHint() {
     const g = G();
     if (!isHumanTurn()) return;
-    const m = botFor('hard').chooseMove(g, g.turn);
+    // online, other hands are hidden from this page, so the hint uses the bot that only needs mine
+    const m = (ui.net ? ui.hintBot || (ui.hintBot = LP.bot.makeBot()) : botFor('hard')).chooseMove(g, g.turn);
     ui.hint = { seq: g.seq, cardId: m.cardId, target: m.target != null ? m.target : g.turn, i: m.i };
     ui.wrench = false;
     if (m.type === 'pass') {
@@ -1357,7 +1382,7 @@
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
     if (ui.suppressClick) return;
-    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck]');
+    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck],[data-netremove]');
     if (!t) return;
     audio();
     if (t.dataset.i != null && t.closest('#board')) return tryCell(+t.dataset.i);
@@ -1376,6 +1401,7 @@
       savePrefs();
       return renderOverlay();
     }
+    if (t.dataset.netremove != null) return netSend({ t: 'remove', seat: +t.dataset.netremove });
     if (t.dataset.deck) {
       readSeatNames();
       ui.deck = t.dataset.deck;
@@ -1440,6 +1466,7 @@
       case 'resume': {
         const d = loadSaved();
         if (!d) return;
+        if (ui.net) netLeave();
         ui.gen++;
         ui.game = d.game;
         ui.demo = null;
@@ -1461,7 +1488,29 @@
       case 'log':
         ui.modal = { type: 'log' };
         return render();
+      case 'online':
+        readSeatNames();
+        ui.modal = { type: 'online' };
+        return render();
+      case 'net-create':
+        return netBegin({ t: 'create', name: netName(), opts: { table: ui.table, deck: ui.deck, level: ui.level } });
+      case 'net-join': {
+        const code = (($('net-code') || {}).value || '').toUpperCase().trim();
+        if (code.length !== 4) return toast('Enter the 4-letter game code.');
+        return netBegin({ t: 'join', code, name: netName() });
+      }
+      case 'net-addbot':
+        return netSend({ t: 'addbot' });
+      case 'net-start':
+        return netSend({ t: 'start' });
+      case 'net-copy':
+        return netCopyLink();
+      case 'net-leave':
+        netLeave();
+        ui.modal = { type: 'setup' };
+        return render();
       case 'setup':
+        if (ui.net) netLeave();
         ui.gen++;
         ui.busy = false;
         ui.modal = { type: 'setup' };
@@ -1482,6 +1531,7 @@
         return play(m);
       }
       case 'again':
+        if (ui.net) return netSend({ t: 'again' });
         ui.seats = G().players.map((p) => ({ name: p.name, kind: p.kind }));
         return startGame(ui.seats);
       case 'see-board':
@@ -1544,6 +1594,260 @@
   }
   window.addEventListener('resize', () => G() && renderBoard());
 
+  // ---------------------------------------------------------------- online play
+  // Needs a game server (server/server.js). The page learns its address from, in order: the
+  // server that served it, a ?server= link, a saved address, or one baked in at build time.
+  // Without one, none of this shows and the game is the same static page as ever.
+  const NET_KEY = 'leaky-pipes-online-v1';
+  const BUILT_SERVER = '__LEAKY_SERVER__';
+  const QS = new URLSearchParams(location.search);
+  function serverUrl() {
+    let u = window.LEAKY_SERVER || QS.get('server') || '';
+    try {
+      if (QS.get('server')) localStorage.setItem('leaky-pipes-server', QS.get('server'));
+      if (!u) u = localStorage.getItem('leaky-pipes-server') || '';
+    } catch (e) {
+      /* no storage */
+    }
+    if (!u && BUILT_SERVER.indexOf('LEAKY_SERVER') < 0) u = BUILT_SERVER;
+    return u.replace(/^http/, 'ws').replace(/\/+$/, '');
+  }
+  const netStore = (v) => {
+    try {
+      if (v) localStorage.setItem(NET_KEY, JSON.stringify(v));
+      else localStorage.removeItem(NET_KEY);
+    } catch (e) {
+      /* no storage */
+    }
+  };
+  const netStored = () => {
+    try {
+      return JSON.parse(localStorage.getItem(NET_KEY) || 'null');
+    } catch (e) {
+      return null;
+    }
+  };
+  const netHost = () => !!(ui.net && ui.net.room && ui.net.room.host === ui.net.room.seat);
+  function netName() {
+    const el = $('net-name');
+    const n = ((el && el.value) || ui.netName || '').trim().slice(0, 14);
+    ui.netName = n;
+    try {
+      localStorage.setItem('leaky-pipes-name', n);
+    } catch (e) {
+      /* no storage */
+    }
+    return n;
+  }
+  function netSend(msg) {
+    const n = ui.net;
+    if (n && n.ws && n.ws.readyState === 1) n.ws.send(JSON.stringify(msg));
+    else toast('Not connected. Reconnecting…');
+  }
+  // Open a connection and send `first` (create / join / resume) once it is up.
+  function netBegin(first) {
+    if (ui.net && ui.net.ws) {
+      ui.net.ws.onclose = null;
+      ui.net.ws.close();
+    }
+    const n = (ui.net = Object.assign(ui.net || { room: null, tries: 0 }, { status: 'connecting', first }));
+    let ws;
+    try {
+      ws = new WebSocket(serverUrl());
+    } catch (e) {
+      n.status = 'failed';
+      return render();
+    }
+    n.ws = ws;
+    ws.onopen = () => {
+      n.status = 'open';
+      n.tries = 0;
+      ws.send(JSON.stringify(n.first));
+      renderOverlay();
+    };
+    ws.onmessage = (e) => {
+      let m;
+      try {
+        m = JSON.parse(e.data);
+      } catch (err) {
+        return;
+      }
+      netMessage(m);
+    };
+    ws.onclose = () => {
+      if (ui.net !== n) return;
+      if (!n.code) {
+        // never got into a game
+        ui.net = null;
+        toast("Couldn't reach the game server.");
+        return render();
+      }
+      n.status = 'reconnecting';
+      render();
+      clearTimeout(n.retry);
+      n.retry = setTimeout(() => ui.net === n && netBegin({ t: 'resume', code: n.code, token: n.token }), Math.min(8000, 600 * Math.pow(2, n.tries++)));
+    };
+    render();
+  }
+  function netLeave() {
+    const n = ui.net;
+    if (!n) return;
+    clearTimeout(n.retry);
+    ui.net = null;
+    netStore(null);
+    if (n.ws) {
+      n.ws.onclose = null;
+      try {
+        if (n.ws.readyState === 1) n.ws.send(JSON.stringify({ t: 'leave' }));
+        n.ws.close();
+      } catch (e) {
+        /* already closed */
+      }
+    }
+    ui.gen++;
+    ui.game = null;
+    ui.busy = false;
+    ui.sel = null;
+    ui.vb = null;
+    ui.view = 0;
+    ui.viewer = 0;
+  }
+  function netMessage(m) {
+    const n = ui.net;
+    if (!n) return;
+    if (m.t === 'joined') {
+      n.code = m.code;
+      n.token = m.token;
+      netStore({ code: m.code, token: m.token, server: serverUrl() });
+      return;
+    }
+    if (m.t === 'room') {
+      n.room = m;
+      if (!m.started && !ui.game) ui.modal = { type: 'online' };
+      return ui.modal && ui.modal.type === 'online' ? renderOverlay() : render();
+    }
+    if (m.t === 'gone') {
+      netLeave();
+      ui.modal = { type: 'setup' };
+      toast(m.text || 'That game is no longer available.');
+      return render();
+    }
+    if (m.t === 'error') {
+      sfx.nope();
+      toast(m.text);
+      if (ui.game) ui.busy = ui.game.turn !== ui.viewer || ui.game.phase === 'over';
+      return render();
+    }
+    if (m.t === 'state') {
+      const prev = ui.game;
+      const g = m.game;
+      const seat = n.room ? n.room.seat : 0;
+      const fresh = !n.gotState || !prev || g.seq < prev.seq || g.turns < prev.turns;
+      const stillOver = !fresh && prev.phase === 'over' && g.phase === 'over';
+      n.gotState = true;
+      ui.game = g;
+      ui.demo = null;
+      ui.viewer = seat;
+      if (fresh) {
+        ui.gen++;
+        ui.view = seat;
+        ui.sel = null;
+        ui.flips = {};
+        ui.wrench = false;
+        ui.hint = null;
+        ui.vb = null;
+        ui.focus = null;
+        ui.fitAll = false;
+        ui.since = {};
+        ui.shownAt = new Map();
+        ui.botMark = null;
+        ui.modal = null;
+      } else if (ui.modal && ui.modal.type === 'online') ui.modal = null;
+      const ev = m.ev;
+      if (ev && ev.move) {
+        const mv = ev.move;
+        ui.lastActor = ev.p;
+        if (ev.p === seat) ui.since[seat] = g.seq;
+        if (mv.type !== 'discard' && mv.type !== 'pass' && mv.i != null) {
+          const target = mv.target != null ? mv.target : ev.p;
+          ui.anim = { target, i: mv.i };
+          if (ev.p !== seat) ui.botMark = { target, i: mv.i, seq: g.seq };
+          if (target !== ev.p) {
+            ui.flash = target;
+            sfx.leak();
+            if (target === seat && ev.p !== seat) {
+              toast(g.log[g.log.length - 1].text);
+              ui.view = seat;
+            }
+          } else if (mv.type === 'wrench' || mv.type === 'cover') sfx.repair();
+          else sfx.place();
+        }
+      }
+      if (g.phase !== 'over' && g.turn === seat && ui.view !== seat && !(ui.botMark && ui.botMark.target === ui.view)) ui.view = seat;
+      if (ui.modal && ui.modal.type === 'over' && g.phase !== 'over') ui.modal = null;
+      return ui.modal || stillOver ? render() : proceed();
+    }
+  }
+  function netCopyLink() {
+    const n = ui.net;
+    if (!n || !n.code) return;
+    const u = new URL(location.href.split('?')[0]);
+    u.searchParams.set('room', n.code);
+    if (!window.LEAKY_SERVER && BUILT_SERVER.indexOf('LEAKY_SERVER') >= 0) u.searchParams.set('server', serverUrl());
+    const done = () => toast('Invite link copied.');
+    if (navigator.share && /Mobi|Android|iPad|iPhone/.test(navigator.userAgent)) return navigator.share({ title: 'Leaky Pipes', text: 'Join my Leaky Pipes game: ' + n.code, url: u.href }).catch(() => {});
+    if (navigator.clipboard) return navigator.clipboard.writeText(u.href).then(done, () => toast(u.href));
+    toast(u.href);
+  }
+  const OPT_LABEL = { classic: 'Classic table', endless: 'Endless table', shared: 'Shared table' };
+  function onlineHTML() {
+    const n = ui.net;
+    const room = n && n.room;
+    if (!room) {
+      const busy = n && n.status === 'connecting';
+      const code = (ui.modal && ui.modal.code) || '';
+      return `<div class="sheet setup online" role="dialog" aria-modal="true" aria-labelledby="on-h">
+        <h2 id="on-h">Play <span>online</span></h2>
+        <p>Everyone plays in their own browser. One person creates a game and shares the 4-letter code.</p>
+        <label class="field"><span>Your name</span><input id="net-name" maxlength="14" autocomplete="off" value="${esc(ui.netName || '')}" placeholder="Your name" ${code ? '' : 'data-focus'}></label>
+        <h3>Join a game</h3>
+        <div class="joinrow"><input id="net-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" value="${esc(code)}" aria-label="Game code"><button type="button" class="btn ${code ? 'primary' : ''}" data-act="net-join" ${busy ? 'disabled' : ''} ${code ? 'data-focus' : ''}>Join</button></div>
+        <h3>Or start one</h3>
+        <p class="muted">${OPT_LABEL[ui.table]} · ${ui.deck === 'tuned' ? 'Tuned' : 'Original'} deck. Change these on the previous screen.</p>
+        <div class="row end">
+          <button type="button" class="btn" data-act="net-leave">Back</button>
+          <button type="button" class="btn ${code ? '' : 'primary'}" data-act="net-create" ${busy ? 'disabled' : ''}>${busy ? 'Connecting…' : 'Create a game'}</button>
+        </div>
+      </div>`;
+    }
+    const host = room.host === room.seat;
+    const seats = room.seats
+      .map(
+        (s, i) => `<div class="seat netseat"><span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(s.name)}${i === room.seat ? ' <small>you</small>' : ''}${s.kind === 'bot' ? ' <small>computer</small>' : ''}${i === room.host ? ' <small>host</small>' : ''}${s.online ? '' : ' <small>away</small>'}</span>${host && i !== room.seat ? `<button type="button" class="x" data-netremove="${i}" aria-label="Remove ${esc(s.name)}">×</button>` : '<span></span>'}</div>`
+      )
+      .join('');
+    return `<div class="sheet setup online" role="dialog" aria-modal="true" aria-labelledby="on-h">
+      <h2 id="on-h">Game <span class="code">${esc(room.code)}</span></h2>
+      <p>${host ? 'Share this code or the invite link. Start when everyone is in.' : `Waiting for ${esc(room.seats[room.host] ? room.seats[room.host].name : 'the host')} to start the game.`}${n.status === 'reconnecting' ? ' <b>Reconnecting…</b>' : ''}</p>
+      <div class="row"><button type="button" class="btn" data-act="net-copy">Copy invite link</button></div>
+      <h3>Players</h3>
+      ${seats}
+      <p class="muted">${room.seats.length} of 4 seats · ${OPT_LABEL[room.opts.table]} · ${room.opts.deck === 'tuned' ? 'Tuned' : 'Original'} deck${room.seats.some((s) => s.kind === 'bot') ? ' · Computers: ' + room.opts.level : ''}</p>
+      <div class="row end">
+        <button type="button" class="btn" data-act="net-leave">Leave</button>
+        ${host && room.seats.length < 4 ? '<button type="button" class="btn" data-act="net-addbot">Add a computer</button>' : ''}
+        ${host ? `<button type="button" class="btn primary" data-act="net-start" ${room.seats.length < 2 ? 'disabled' : 'data-focus'}>Start game</button>` : ''}
+      </div>
+    </div>`;
+  }
+  document.addEventListener('visibilitychange', () => {
+    const n = ui.net;
+    if (!document.hidden && n && n.code && (!n.ws || n.ws.readyState > 1)) {
+      clearTimeout(n.retry);
+      netBegin({ t: 'resume', code: n.code, token: n.token });
+    }
+  });
+
   // ---------------------------------------------------------------- boot
   const saved = loadSaved();
   if (saved && saved.seats) ui.seats = saved.seats;
@@ -1559,9 +1863,24 @@
     ui.demo = null;
   }
   ui.modal = { type: 'setup' };
+  try {
+    ui.netName = localStorage.getItem('leaky-pipes-name') || '';
+  } catch (e) {
+    ui.netName = '';
+  }
+  if (serverUrl()) {
+    const back = netStored();
+    const room = (QS.get('room') || '').toUpperCase().slice(0, 4);
+    if (back && back.code && back.server === serverUrl() && (!room || room === back.code)) {
+      // pick up the online game this browser was in
+      ui.net = { room: null, tries: 0, code: back.code, token: back.token };
+      netBegin({ t: 'resume', code: back.code, token: back.token });
+    } else if (room) ui.modal = { type: 'online', code: room };
+  }
   render();
   window.__leaky = ui;
   window.__leakyStart = (seats) => startGame(seats);
   window.__leakyRender = () => render();
   window.__leakyProceed = () => proceed();
+  window.__leakyPlay = (m) => play(m);
 })();
