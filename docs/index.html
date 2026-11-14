@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leaky Pipes</title>
+<meta name="theme-color" content="#1a232a">
+<meta name="apple-mobile-web-app-title" content="Leaky Pipes">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
@@ -2896,7 +2901,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
     const w = g.winner;
     const solo = humans() === 1;
     const humanWon = w >= 0 && g.players[w].kind === 'human';
-    const title = w < 0 ? 'No <span>winner</span>' : humanWon && solo ? 'You <span>win!</span>' : `${esc(g.players[w].name)} <span>wins</span>`;
+    const title = w < 0 ? 'No <span>winner</span>' : humanWon && solo && g.players[w].name === 'You' ? 'You <span>win!</span>' : `${esc(g.players[w].name)} <span>wins${humanWon && solo ? '!' : ''}</span>`;
     const rounds = Math.ceil(g.turns / g.players.length);
     const rows = g.players
       .map((pl, i) => {

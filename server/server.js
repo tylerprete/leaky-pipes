@@ -115,6 +115,17 @@ const server = http.createServer((req, res) => {
       return res.end('Run "npm run build" first.');
     }
   }
+  // the page's icon files
+  const STATIC = { '/icon.svg': 'image/svg+xml', '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png', '/manifest.webmanifest': 'application/manifest+json' };
+  if (STATIC[url]) {
+    try {
+      const body = fs.readFileSync(path.join(__dirname, '..', 'docs', url.slice(1)));
+      res.writeHead(200, { 'content-type': STATIC[url], 'cache-control': 'public, max-age=86400' });
+      return res.end(body);
+    } catch (e) {
+      /* fall through to 404 */
+    }
+  }
   res.writeHead(404);
   res.end('Not found');
 });

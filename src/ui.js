@@ -913,7 +913,7 @@
     const w = g.winner;
     const solo = humans() === 1;
     const humanWon = w >= 0 && g.players[w].kind === 'human';
-    const title = w < 0 ? 'No <span>winner</span>' : humanWon && solo ? 'You <span>win!</span>' : `${esc(g.players[w].name)} <span>wins</span>`;
+    const title = w < 0 ? 'No <span>winner</span>' : humanWon && solo && g.players[w].name === 'You' ? 'You <span>win!</span>' : `${esc(g.players[w].name)} <span>wins${humanWon && solo ? '!' : ''}</span>`;
     const rounds = Math.ceil(g.turns / g.players.length);
     const rows = g.players
       .map((pl, i) => {
