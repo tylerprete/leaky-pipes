@@ -135,11 +135,40 @@
     const cells = new Array(w * h).fill(null);
     const valve = (valveY != null ? valveY : Math.floor(h / 2)) * w + (valveX != null ? valveX : w - 1);
     cells[valve] = { card: { id: 'valve' + owner, kind: 'valve' }, flip: face === 'E', repaired: false, wrench: false, under: [], by: owner };
-    return { w, h, cells, valve, last: valve, owner, spout: -1 };
+    return { w, h, cells, occ: [valve], valve, last: valve, owner, spout: -1 };
+  }
+  // b.occ lists the occupied cells in ascending order. Tables are mostly empty (the shared one
+  // is 45x45), so everything that used to scan all cells walks this list instead.
+  function occOf(b) {
+    if (!b.occ) {
+      // boards from an old save, or built by hand
+      const occ = [];
+      for (let i = 0; i < b.cells.length; i++) if (b.cells[i]) occ.push(i);
+      b.occ = occ;
+    }
+    return b.occ;
   }
   function cloneBoard(b) {
-    return Object.assign({}, b, { cells: b.cells.slice() });
+    return Object.assign({}, b, { cells: b.cells.slice(), occ: occOf(b).slice() });
   }
+  // The only way a cell is written. Call it on a board you just cloned (boards are otherwise
+  // treated as immutable, and several board objects can share one cells/occ pair).
+  function setCell(b, i, piece) {
+    if (!b.cells[i]) {
+      const occ = occOf(b);
+      let lo = 0;
+      let hi = occ.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (occ[mid] < i) lo = mid + 1;
+        else hi = mid;
+      }
+      occ.splice(lo, 0, i);
+    }
+    b.cells[i] = piece;
+    ENDS.delete(b);
+  }
+  const ENDS = new WeakMap(); // board -> its open ends (boards don't change once built)
 
   // ---------- shared table ----------
   // On the shared table every pipeline lives on one grid. Each board keeps only its own cards;
@@ -152,14 +181,14 @@
     if (game.table !== 'shared') return;
     const P = game.players;
     const size = P[0].board.cells.length;
-    const occ = P.map((pl) => pl.board.cells.map((c) => (c ? 1 : 0)));
+    const occ = P.map((pl) => occOf(pl.board));
     const ends = P.map((pl) => openEnds(pl.board).filter((e) => e.t >= 0).map((e) => e.t));
     P.forEach((pl, k) => {
       const f = new Array(size).fill(0);
       const r = new Array(size).fill(0);
       P.forEach((q, j) => {
         if (j === k) return;
-        for (let i = 0; i < size; i++) if (occ[j][i]) f[i] = j + 1;
+        for (const i of occ[j]) f[i] = j + 1;
         for (const t of ends[j]) r[t] = j + 1;
       });
       pl.board = Object.assign({}, pl.board, { foreign: f, reserved: r });
@@ -224,9 +253,12 @@
   }
 
   // Openings that face an empty cell: places the pipeline can still grow.
+  // (The result is cached per board: treat it as read-only.)
   function openEnds(b) {
+    const hit = ENDS.get(b);
+    if (hit) return hit;
     const ends = [];
-    for (let i = 0; i < b.cells.length; i++) {
+    for (const i of occOf(b)) {
       const p = b.cells[i];
       if (!isPipeLike(p)) continue;
       for (const d of pieceOpenings(p)) {
@@ -235,6 +267,7 @@
         else if (!b.cells[n]) ends.push({ i, d, t: n });
       }
     }
+    ENDS.set(b, ends);
     return ends;
   }
 
@@ -272,7 +305,7 @@
     return false;
   }
   function leakAt(b) {
-    for (let i = 0; i < b.cells.length; i++) if (pieceLeaks(b, i)) return i;
+    for (const i of occOf(b)) if (pieceLeaks(b, i)) return i;
     return -1;
   }
 
@@ -281,7 +314,7 @@
   function longestPath(b, target) {
     if (target === b.valve) return 0;
     const adj = new Map();
-    for (let i = 0; i < b.cells.length; i++) if (isPipeLike(b.cells[i])) adj.set(i, neighborsConnected(b, i));
+    for (const i of occOf(b)) if (isPipeLike(b.cells[i])) adj.set(i, neighborsConnected(b, i));
     let best = -1;
     let budget = 50000;
     const seen = new Set([b.valve]);
@@ -353,7 +386,7 @@
     }
     if (!conns.length) return fail('It has to connect to an open pipe end.');
     const nb = cloneBoard(b);
-    nb.cells[i] = { card, flip, repaired: false, wrench: false, under: [], by: -1 };
+    setCell(nb, i, { card, flip, repaired: false, wrench: false, under: [], by: -1 });
     if (!openEnds(nb).length) return fail('That would completely block the pipeline.');
     return { ok: true, conns };
   }
@@ -370,7 +403,7 @@
     }
     if (!used.length) return fail('A cap has to close an open pipe end.');
     const nb = cloneBoard(b);
-    nb.cells[i] = { card, flip, repaired: false, wrench: false, under: [], by: -1 };
+    setCell(nb, i, { card, flip, repaired: false, wrench: false, under: [], by: -1 });
     if (!openEnds(nb).length) return fail("A cap can't stop the water: another open end must remain.");
     return { ok: true, used };
   }
@@ -501,24 +534,24 @@
   function boardAfter(b, move, card, actor) {
     const nb = cloneBoard(b);
     if (move.type === 'pipe') {
-      nb.cells[move.i] = { card, flip: !!move.flip, repaired: false, wrench: false, under: [], by: actor };
+      setCell(nb, move.i, { card, flip: !!move.flip, repaired: false, wrench: false, under: [], by: actor });
       nb.last = move.i;
     } else if (move.type === 'cap') {
-      nb.cells[move.i] = { card, flip: !!move.flip, repaired: false, wrench: false, under: [], by: actor };
+      setCell(nb, move.i, { card, flip: !!move.flip, repaired: false, wrench: false, under: [], by: actor });
     } else if (move.type === 'cover') {
       const old = nb.cells[move.i];
       const ownRepair = actor === b.owner;
-      nb.cells[move.i] = {
+      setCell(nb, move.i, {
         card,
         flip: !!move.flip,
         repaired: ownRepair,
         wrench: false,
         under: old.under.concat([{ card: old.card, flip: old.flip, wrench: old.wrench }]),
         by: actor,
-      };
+      });
     } else if (move.type === 'wrench') {
       const old = nb.cells[move.i];
-      nb.cells[move.i] = Object.assign({}, old, { wrench: true, repaired: true });
+      setCell(nb, move.i, Object.assign({}, old, { wrench: true, repaired: true }));
     }
     return nb;
   }
@@ -643,10 +676,9 @@
     return Object.assign({}, game, {
       players: game.players.map((pl) => {
         const cells = {};
-        pl.board.cells.forEach((c, i) => {
-          if (c) cells[i] = c;
-        });
+        for (const i of occOf(pl.board)) cells[i] = pl.board.cells[i];
         const board = Object.assign({}, pl.board, { cells });
+        delete board.occ;
         delete board.foreign;
         delete board.reserved;
         const out = Object.assign({}, pl, { board });
@@ -661,8 +693,9 @@
       players: packed.players.map((pl) => {
         const b = pl.board;
         const cells = new Array(b.w * b.h).fill(null);
-        for (const k of Object.keys(b.cells)) cells[+k] = b.cells[k];
-        return Object.assign({}, pl, { board: Object.assign({}, b, { cells }) });
+        const occ = Object.keys(b.cells).map(Number).sort((x, y) => x - y);
+        for (const i of occ) cells[i] = b.cells[i];
+        return Object.assign({}, pl, { board: Object.assign({}, b, { cells, occ }) });
       }),
     });
     syncShared(game);
@@ -831,7 +864,7 @@
     if (s >= 0) {
       const nb = cloneBoard(me.board);
       const dir = openEnds(me.board)[0].d;
-      nb.cells[s] = { card: { id: 'spout' + p, kind: 'spout' }, flip: dir === 'E', repaired: false, wrench: false, under: [], by: p };
+      setCell(nb, s, { card: { id: 'spout' + p, kind: 'spout' }, flip: dir === 'E', repaired: false, wrench: false, under: [], by: p });
       nb.spout = s;
       nb.spoutDir = dir;
       me.board = nb;
@@ -925,7 +958,7 @@
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, packGame, unpackGame, SHARED, withForeignPiece,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, packGame, unpackGame, setCell, occOf, SHARED, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);

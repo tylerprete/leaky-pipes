@@ -19,7 +19,7 @@ const cap = (caps) => ({ id: 't' + uid++, kind: 'cap', caps });
 const at = (b, x, y) => y * b.w + x;
 function put(b, x, y, card, flip, extra) {
   const i = at(b, x, y);
-  b.cells[i] = Object.assign({ card, flip: !!flip, repaired: false, wrench: false, under: [], by: b.owner }, extra || {});
+  LP.setCell(b, i, Object.assign({ card, flip: !!flip, repaired: false, wrench: false, under: [], by: b.owner }, extra || {}));
   if (card.kind === 'pipe') b.last = i;
   return i;
 }
