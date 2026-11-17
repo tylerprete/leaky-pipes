@@ -338,4 +338,100 @@ test('names are cleaned and kept unique', () => {
   assert.ok(!names.some((n) => /^you$/i.test(n)), '"You" is reserved');
 });
 
+// ---- player colors
+const colors = (h, conn) => h.last(conn || 'a', 'room').seats.map((x) => x.color);
+
+test('colors: each player gets the one they ask for if free, else the first free; computers too', () => {
+  const h = host();
+  h.say('a', { t: 'create', name: 'Ann', color: 'teal' });
+  h.say('b', { t: 'join', name: 'Bob', color: 'teal' }); // taken: first free
+  h.say('c', { t: 'join', name: 'Cy', color: 'nonsense' });
+  h.say('a', { t: 'addbot' });
+  assert.deepStrictEqual(colors(h), ['teal', 'blue', 'orange', 'green']);
+  h.say('a', { t: 'start' });
+  assert.deepStrictEqual(h.last('b', 'state').game.players.map((p) => p.color), ['teal', 'blue', 'orange', 'green'], 'every view carries the colors');
+  assert.deepStrictEqual(h.room.game.players.map((p) => p.color), ['teal', 'blue', 'orange', 'green']);
+});
+
+test('colors: change your own in the lobby; a taken or unknown color is refused', () => {
+  const h = host();
+  h.say('a', { t: 'create', name: 'Ann' });
+  h.say('b', { t: 'join', name: 'Bob' });
+  h.say('b', { t: 'color', color: 'red' });
+  assert.deepStrictEqual(colors(h), ['blue', 'red']);
+  h.say('b', { t: 'color', color: 'blue' });
+  assert.match(h.last('b', 'error').text, /Ann already has blue/);
+  assert.deepStrictEqual(colors(h, 'b'), ['blue', 'red'], 'the refused player is sent the real picks');
+  h.say('b', { t: 'color', color: 'mauve' });
+  assert.match(h.last('b', 'error').text, /Pick one/);
+  h.say('b', { t: 'color', seat: 0, color: 'gold' });
+  assert.match(h.last('b', 'error').text, /can't change that player/);
+  assert.deepStrictEqual(colors(h), ['blue', 'red']);
+  const before = JSON.stringify(h.room.save());
+  assert.strictEqual(h.say('b', { t: 'color', color: 'red' }), 'quiet', 'picking the color you have changes nothing');
+  assert.strictEqual(JSON.stringify(h.room.save()), before);
+});
+
+test("colors: the host can recolor a computer, not another person; nobody mid-game", () => {
+  const h = host();
+  h.say('a', { t: 'create', name: 'Ann' });
+  h.say('b', { t: 'join', name: 'Bob' });
+  h.say('a', { t: 'addbot' });
+  h.say('a', { t: 'color', seat: 2, color: 'purple' });
+  h.say('b', { t: 'color', seat: 2, color: 'gold' }); // not the host
+  h.say('a', { t: 'color', seat: 1, color: 'gold' }); // a person
+  assert.deepStrictEqual(colors(h), ['blue', 'orange', 'purple']);
+  h.say('a', { t: 'start' });
+  h.say('a', { t: 'color', color: 'teal' });
+  assert.match(h.last('a', 'error').text, /between games/);
+  assert.strictEqual(h.room.s.seats[0].color, 'blue');
+});
+
+test('colors: after a game you can change, and the next game uses it', () => {
+  const h = twoPlayers();
+  h.room.game.phase = 'over';
+  h.say('a', { t: 'color', color: 'gold' });
+  assert.strictEqual(h.last('b', 'state').game.players[0].color, 'gold', 'the finished table shows it at once');
+  h.say('a', { t: 'again' });
+  assert.deepStrictEqual(h.room.game.players.map((p) => p.color), ['gold', 'orange']);
+});
+
+test('colors: stay with the seat through removal, reconnects, leaving mid-game and a reload', () => {
+  const h = host();
+  h.say('a', { t: 'create', name: 'Ann' });
+  h.say('b', { t: 'join', name: 'Bob' });
+  h.say('c', { t: 'join', name: 'Cy' });
+  h.say('a', { t: 'remove', seat: 1 });
+  assert.deepStrictEqual(colors(h), ['blue', 'green'], 'removing Bob leaves Cy green');
+  h.say('d', { t: 'join', name: 'Di' });
+  assert.deepStrictEqual(colors(h), ['blue', 'green', 'orange'], "Bob's color is free again");
+  h.say('a', { t: 'start' });
+  const tok = h.last('c', 'joined').token;
+  h.room.onClose('c', false);
+  h.say('c2', { t: 'resume', code: 'ABCD', token: tok, color: 'red' });
+  assert.strictEqual(h.room.s.seats[1].color, 'green', 'a resume keeps the seat color');
+  h.say('d', { t: 'leave' });
+  assert.strictEqual(h.room.s.seats[2].kind, 'bot');
+  assert.strictEqual(h.room.s.seats[2].color, 'orange', 'the computer that takes over keeps it');
+  const r = Room.load(h.io, JSON.parse(JSON.stringify(h.room.save())));
+  assert.deepStrictEqual(r.game.players.map((p) => p.color), ['blue', 'green', 'orange']);
+});
+
+test('colors: rooms saved before colors existed get the defaults in seat order', () => {
+  const h = twoPlayers();
+  h.say('a', { t: 'addbot' }); // refused mid-game; just a 2-seat game
+  const old = JSON.parse(JSON.stringify(h.room.save()));
+  for (const x of old.seats) delete x.color;
+  for (const p of old.game.players) delete p.color;
+  const r = Room.load(h.io, old);
+  assert.deepStrictEqual(r.s.seats.map((x) => x.color), ['blue', 'orange']);
+  assert.deepStrictEqual(r.game.players.map((p) => p.color), ['blue', 'orange']);
+});
+
+test('colors: fillColors keeps good picks, fixes duplicates and unknowns', () => {
+  const seats = LP.fillColors([{ color: 'teal' }, { color: 'teal' }, { color: 'nope' }, {}]);
+  assert.deepStrictEqual(seats.map((x) => x.color), ['teal', 'blue', 'orange', 'green']);
+  assert.strictEqual(new Set(LP.COLOR_IDS).size, LP.COLORS.length);
+});
+
 console.log(`\n${passed} passed`);

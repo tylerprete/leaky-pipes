@@ -44,6 +44,9 @@ class Room {
     r.s = Object.assign({}, data);
     delete r.s.game;
     r.game = data.game ? LP.unpackGame(data.game) : null;
+    // rooms saved before seats had colors get the defaults, in seat order
+    LP.fillColors(r.s.seats);
+    if (r.game) r.game.players.forEach((pl, i) => r.s.seats[i] && (pl.color = r.s.seats[i].color));
     return r;
   }
   // Connections the host no longer has (after a restart or wake-up) are marked as away.
@@ -55,6 +58,10 @@ class Room {
         s.leftAt = this.io.now();
       }
     }
+  }
+  // A color for a seat: the one wanted if no one else at the table has it, else the first free one.
+  colorFor(want, except) {
+    return LP.pickColor(want, this.s.seats.filter((x) => x !== except).map((x) => x.color));
   }
   get empty() {
     return !this.s.created || !this.s.seats.some((x) => x.kind !== 'bot');
@@ -83,7 +90,7 @@ class Room {
   }
   info(seat) {
     const s = this.s;
-    return { t: 'room', code: s.code, seat, host: s.host, started: !!this.game, opts: s.opts, seats: s.seats.map((x) => ({ name: x.name, kind: x.kind, online: x.kind === 'bot' || !!x.conn })) };
+    return { t: 'room', code: s.code, seat, host: s.host, started: !!this.game, opts: s.opts, seats: s.seats.map((x) => ({ name: x.name, kind: x.kind, color: x.color, online: x.kind === 'bot' || !!x.conn })) };
   }
   // What one seat is allowed to see: everyone else's hand and the deck are hidden.
   view(seat) {
@@ -96,6 +103,7 @@ class Room {
     p.drawn = g.turn === seat ? g.drawn : null;
     p.players = p.players.map((pl, i) => ({
       name: pl.name,
+      color: pl.color,
       kind: i === seat ? 'human' : this.s.seats[i].kind === 'bot' ? 'bot' : 'remote',
       away: this.s.seats[i].kind !== 'bot' && !this.s.seats[i].conn,
       wrenches: pl.wrenches,
@@ -125,7 +133,7 @@ class Room {
   start() {
     const s = this.s;
     const n = s.seats.length;
-    this.game = LP.newGame({ players: s.seats.map((x) => ({ name: x.name, kind: x.kind === 'bot' ? 'bot' : 'human' })), table: s.opts.table, deck: s.opts.deck, first: s.played % n });
+    this.game = LP.newGame({ players: s.seats.map((x) => ({ name: x.name, color: x.color, kind: x.kind === 'bot' ? 'bot' : 'human' })), table: s.opts.table, deck: s.opts.deck, first: s.played % n });
     this.game.level = s.opts.level;
     s.played++;
     this.broadcast(null);
@@ -232,7 +240,7 @@ class Room {
       s.created = true;
       s.opts = this.opts(msg.opts, { table: 'classic', deck: 'tuned', level: 'normal' });
       const token = io.token();
-      s.seats.push({ name: this.cleanName(msg.name, 'Player 1'), kind: 'human', conn, token });
+      s.seats.push({ name: this.cleanName(msg.name, 'Player 1'), kind: 'human', color: this.colorFor(msg.color), conn, token });
       io.send(conn, { t: 'joined', code: s.code, token });
       return this.broadcast(null);
     }
@@ -258,7 +266,7 @@ class Room {
       if (this.game) return fail('That game has already started.');
       if (s.seats.length >= 4) return fail('That game is full.');
       const token = io.token();
-      s.seats.push({ name: this.cleanName(msg.name, 'Player ' + (s.seats.length + 1)), kind: 'human', conn, token });
+      s.seats.push({ name: this.cleanName(msg.name, 'Player ' + (s.seats.length + 1)), kind: 'human', color: this.colorFor(msg.color), conn, token });
       io.send(conn, { t: 'joined', code: s.code, token });
       this.fixHost();
       return this.broadcast(null);
@@ -272,7 +280,25 @@ class Room {
     }
     if (msg.t === 'addbot' && isHost && !this.game) {
       if (s.seats.length >= 4) return fail('The table is full.');
-      s.seats.push({ name: this.cleanName(BOT_NAMES[s.seats.filter((x) => x.kind === 'bot').length % 3], 'Computer'), kind: 'bot' });
+      s.seats.push({ name: this.cleanName(BOT_NAMES[s.seats.filter((x) => x.kind === 'bot').length % 3], 'Computer'), kind: 'bot', color: this.colorFor(null) });
+      return this.broadcast(null);
+    }
+    if (msg.t === 'color') {
+      // your own seat, or (for the host) a computer's. Not while a game is being played.
+      const k = msg.seat == null ? seat : msg.seat | 0;
+      const x = s.seats[k];
+      if (!x || (k !== seat && !(isHost && x.kind === 'bot'))) return fail("You can't change that player's color.");
+      if (this.game && this.game.phase !== 'over') return fail('Colors can be changed between games.');
+      const c = LP.COLORS.find((y) => y.id === msg.color);
+      if (!c) return fail('Pick one of the colors shown.');
+      if (x.color === c.id) return 'quiet';
+      const owner = s.seats.find((y) => y !== x && y.color === c.id);
+      if (owner) {
+        this.io.send(conn, this.info(seat)); // their picker may be out of date: send the real picks
+        return fail(`${owner.name} already has ${c.name.toLowerCase()}.`);
+      }
+      x.color = c.id;
+      if (this.game) this.game.players[k].color = c.id; // the finished game's table shows it too
       return this.broadcast(null);
     }
     if (msg.t === 'remove' && isHost && !this.game) {

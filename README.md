@@ -14,6 +14,7 @@ Play it at https://tylerprete.github.io/leaky-pipes/ (GitHub Pages serves `docs/
   - *Tuned* (default): a self-play remix with more elbows, very few T's, slightly fewer leaky pipes, and 6 wrench cards (hold one and play it to fix a leak; the card is the discard).
   - *Original*: an estimate of the boxed mix.
 - On Classic and Endless, the other pipelines are shown live next to yours. Tap one to swap it onto the big board, or drag a card over it.
+- **Player colors**: tap a player's dot on the setup screen (or your own in an online lobby) to pick from 8 colors. No two players at a table share one. Your pick is remembered and asked for whenever you join. Online, you can change it in the lobby or after a game ends, and the host can recolor computers. The four defaults (blue, orange, green, pink) stay distinguishable with the common kinds of color blindness; `node tools/palette.js` checks that.
 
 ## Online play
 
@@ -38,7 +39,7 @@ npm run server        # http://localhost:8787 serves the page and the game socke
 - To make the GitHub Pages copy offer online play, bake the address in: `LEAKY_SERVER=wss://your-host npm run build`. A `?server=wss://your-host` link also works without rebuilding.
 - Settings: `PORT`, `MAX_ROOMS` (500), `AWAY_MS` (30000), `BOT_MS` (900).
 
-Test: `node test/online.js` plays a full game with two browsers and a computer, including a reaction, a disconnect and a resume.
+Test: `node test/colors.js` picks colors locally and online and checks the shared table's tints. Test: `node test/online.js` plays a full game with two browsers and a computer, including a reaction, a disconnect and a resume.
 
 ## Offline
 

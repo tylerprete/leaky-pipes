@@ -54,12 +54,13 @@
     if (pr.level) ui.level = pr.level;
     if (pr.table) ui.table = pr.table;
     if (pr.deck) ui.deck = pr.deck;
+    if (pr.color) ui.color = pr.color; // your favorite: asked for when you sit down
   } catch (e) {
     /* no storage */
   }
   function savePrefs() {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table, deck: ui.deck }));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ sound: ui.sound, level: ui.level, table: ui.table, deck: ui.deck, color: ui.color }));
     } catch (e) {
       /* no storage */
     }
@@ -602,8 +603,30 @@
     return best ? best.concat([b.spout]) : [];
   }
 
-  // ---- player colors (used on the shared table and in panel headers)
-  const PCOLOR = ['#3aa0e6', '#e0874a', '#5fc58f', '#c58be0'];
+  // ---- player colors (used on the shared table, in panel headers, the lobby and reactions)
+  // Each player picks one (LP.COLORS). Games saved, or served, before that fall back to the
+  // defaults in seat order.
+  const COLOR = {};
+  LP.COLORS.forEach((c) => (COLOR[c.id] = c));
+  const hexOf = (id, i) => (COLOR[id] || LP.COLORS[i % 4]).hex;
+  const colorOf = (i) => {
+    const g = G();
+    return hexOf(g && g.players[i] && g.players[i].color, i);
+  };
+  // A player's dot. With a key it's a button that opens the color picker for that seat.
+  function dotHTML(hex, key, label) {
+    if (!key) return `<span class="dot" style="background:${hex}"></span>`;
+    return `<button type="button" class="dot pick${ui.picking === key ? ' open' : ''}" style="background:${hex}" data-pick="${key}" aria-expanded="${ui.picking === key}" aria-label="${esc(label)}" title="Change color"></button>`;
+  }
+  // The open picker for seat key: seats is [{name, color}], i the seat being changed.
+  function swatchesHTML(key, seats, i) {
+    if (ui.picking !== key) return '';
+    return `<div class="swatches" role="group" aria-label="Color for ${esc(seats[i].name)}">${LP.COLORS.map((c) => {
+      const owner = seats.find((x, k) => k !== i && x.color === c.id);
+      const on = seats[i].color === c.id;
+      return `<button type="button" class="sw${on ? ' on' : ''}" style="--sw:${c.hex}" data-color="${key}:${c.id}" ${owner ? 'disabled' : ''} aria-pressed="${on}" title="${owner ? esc(c.name + ': ' + owner.name) : c.name}" aria-label="${c.name}${owner ? ', taken by ' + esc(owner.name) : ''}">${owner ? esc(owner.name.slice(0, 1).toUpperCase()) : ''}</button>`;
+    }).join('')}</div>`;
+  }
   const shared = () => G() && G().table === 'shared';
   // Which players' pipelines are drawn on the surface that shows player v
   const surfaceOf = (v) => (shared() ? G().players.map((_, i) => i) : [v]);
@@ -625,9 +648,9 @@
       g.winner === i ? '<span class="tag-win">winner</span>' : '',
       playing ? '<span class="thinking"><i></i><i></i><i></i></span>' : '',
     ].join('');
-    return `<span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(you && opts.main ? 'Your pipeline' : pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}${pl.away ? ' <small>away</small>' : ''}</span>
+    return `<span class="dot" style="background:${colorOf(i)}"></span><span class="nm">${esc(you && opts.main ? 'Your pipeline' : pl.name)}${pl.kind === 'bot' ? ' <small>CPU</small>' : ''}${pl.away ? ' <small>away</small>' : ''}</span>
       <span class="ct">${prog}<small>/${g.required}</small></span>
-      <span class="bar"><i style="width:${(100 * prog) / g.required}%;background:${PCOLOR[i % 4]}"></i></span>
+      <span class="bar"><i style="width:${(100 * prog) / g.required}%;background:${colorOf(i)}"></i></span>
       <span class="tags">${tags}</span>`;
   }
 
@@ -702,7 +725,7 @@
       const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(bb, i).map((u) => u.d)) : null;
       const pop = ui.anim && ui.anim.target === pi && ui.anim.i === i;
       const pouring = g.phase === 'over' && g.winner === pi;
-      out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && bb.spoutDir === 'E', tint: tinted ? PCOLOR[pi % 4] : null })}</g></g>`;
+      out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && bb.spoutDir === 'E', tint: tinted ? colorOf(pi) : null })}</g></g>`;
     }
     const card = ui.sel ? findCard(ui.sel) : null;
     for (const [i, t] of targets) {
@@ -855,8 +878,8 @@
     const view = shared() ? sharedView(aspect, svg.clientWidth || wrap.clientWidth, svg.clientHeight || wrap.clientHeight - 40) : computeView(pl.board, aspect);
     setViewBox(svg, view);
     svg.setAttribute('aria-label', shared() ? 'The shared table' : pl.name + "'s pipeline");
-    $('mainhead').innerHTML = !live() ? '' : shared() ? `<span class="nm">Shared table</span>${ui.focus != null ? `<span class="following" style="--pc:${PCOLOR[ui.focus % 4]}">${esc(g.players[ui.focus].name)}</span>` : ''}<button type="button" class="ghost tiny" data-act="fit">${ui.fitAll || ui.focus != null ? 'Follow play' : 'Whole table'}</button>` : badgeHTML(ui.view, { main: true });
-    $('mainhead').style.setProperty('--pc', PCOLOR[ui.view % 4]);
+    $('mainhead').innerHTML = !live() ? '' : shared() ? `<span class="nm">Shared table</span>${ui.focus != null ? `<span class="following" style="--pc:${colorOf(ui.focus)}">${esc(g.players[ui.focus].name)}</span>` : ''}<button type="button" class="ghost tiny" data-act="fit">${ui.fitAll || ui.focus != null ? 'Follow play' : 'Whole table'}</button>` : badgeHTML(ui.view, { main: true });
+    $('mainhead').style.setProperty('--pc', colorOf(ui.view));
     drawSurface(svg, players, { main: true, view });
     renderOthers();
   }
@@ -1010,7 +1033,7 @@
     if (!r || !room || !room.seats[seat]) return;
     const el = document.createElement('div');
     el.className = 'react';
-    el.style.setProperty('--pc', PCOLOR[seat % 4]);
+    el.style.setProperty('--pc', hexOf(room.seats[seat].color, seat));
     el.innerHTML = `<b>${r.e}</b><span>${seat === room.seat ? 'You' : esc(room.seats[seat].name)}<i>${r.label}</i></span>`;
     const box = $('reacts');
     box.style.top = Math.round($('boardwrap').getBoundingClientRect().top + 10) + 'px'; // over the top of the table, clear of the names
@@ -1054,6 +1077,8 @@
   };
   function setupHTML() {
     const s = ui.seats;
+    if (s[0] && !s[0].color && s[0].kind === 'human' && ui.color) s[0].color = ui.color;
+    LP.fillColors(s);
     const saved = loadSaved();
     const canResume = saved && saved.game.phase !== 'over' && !ui.game;
     const inGame = ui.game && ui.game.phase !== 'over';
@@ -1061,13 +1086,14 @@
     const seats = s
       .map(
         (seat, i) => `<div class="seat">
+        ${dotHTML(COLOR[seat.color].hex, 'L' + i, `Player ${i + 1} color: ${COLOR[seat.color].name}`)}
         <input id="seat-name-${i}" value="${esc(seat.name)}" maxlength="14" aria-label="Player ${i + 1} name" data-seat="${i}" autocomplete="off">
         <span class="seg" role="group" aria-label="Player ${i + 1} type">
           <button type="button" class="${seat.kind === 'human' ? 'on' : ''}" data-kind="${i}:human">Person</button>
           <button type="button" class="${seat.kind === 'bot' ? 'on' : ''}" data-kind="${i}:bot">Computer</button>
         </span>
         ${s.length > 2 ? `<button type="button" class="x" data-remove="${i}" aria-label="Remove player ${i + 1}">×</button>` : '<span></span>'}
-      </div>`
+      </div>${swatchesHTML('L' + i, s, i)}`
       )
       .join('');
     const hasHuman = s.some((x) => x.kind === 'human');
@@ -1141,13 +1167,15 @@
     const rows = g.players
       .map((pl, i) => {
         const s = statsFor(g, i);
-        return `<tr class="${i === w ? 'won' : ''}"><th scope="row">${esc(pl.name)}</th><td>${Math.min(LP.progressOf(pl.board), 99)}</td><td>${s.sprang}</td><td>${s.hit}</td><td>${s.fixed}</td></tr>`;
+        const key = ui.net && ui.net.room ? netColorKey(ui.net.room, i) : null;
+        return `<tr class="${i === w ? 'won' : ''}"><th scope="row">${dotHTML(colorOf(i), key, `${pl.name}'s color`)} ${esc(pl.name)}</th><td>${Math.min(LP.progressOf(pl.board), 99)}</td><td>${s.sprang}</td><td>${s.hit}</td><td>${s.fixed}</td></tr>`;
       })
       .join('');
     return `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="over-h">
       <h2 id="over-h">${title}</h2>
       <p>${w >= 0 ? `Water's flowing: ${LP.progressOf(g.players[w].board)} pipes from valve to spout in ${rounds} rounds.` : 'Nobody could finish.'}</p>
       <table class="stats"><thead><tr><th></th><th>Pipes</th><th>Leaks sprung</th><th>Leaks taken</th><th>Repairs</th></tr></thead><tbody>${rows}</tbody></table>
+      ${ui.net && ui.net.room ? ui.net.room.seats.map((x, i) => swatchesHTML('N' + i, ui.net.room.seats, i)).join('') : ''}
       <div class="row end">
         <button type="button" class="btn" data-act="see-board">Look at the table</button>
         <button type="button" class="btn" data-act="setup">${ui.net ? 'Leave' : 'Change players'}</button>
@@ -1216,9 +1244,11 @@
 
   // ---------------------------------------------------------------- game flow
   function startGame(seats) {
+    ui.picking = null;
     if (ui.net) netLeave(); // a local game replaces any online one
     ui.gen++;
-    const players = seats.map((s, i) => ({ name: (s.name || '').trim() || (s.kind === 'bot' ? BOT_NAMES[i % 3] : 'Player ' + (i + 1)), kind: s.kind }));
+    LP.fillColors(seats);
+    const players = seats.map((s, i) => ({ name: (s.name || '').trim() || (s.kind === 'bot' ? BOT_NAMES[i % 3] : 'Player ' + (i + 1)), kind: s.kind, color: s.color }));
     ui.game = LP.newGame({ players, table: ui.table, deck: ui.deck });
     ui.focus = null;
     ui.fitAll = false;
@@ -1628,7 +1658,7 @@
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
     if (ui.suppressClick) return;
-    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck],[data-netremove],[data-react]');
+    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck],[data-netremove],[data-react],[data-pick],[data-color]');
     if (!t) return;
     audio();
     if (t.dataset.react != null) {
@@ -1656,6 +1686,29 @@
       return renderOverlay();
     }
     if (t.dataset.netremove != null) return netSend({ t: 'remove', seat: +t.dataset.netremove });
+    if (t.dataset.pick) {
+      readSeatNames();
+      ui.picking = ui.picking === t.dataset.pick ? null : t.dataset.pick;
+      return renderOverlay();
+    }
+    if (t.dataset.color) {
+      // L<i>: a seat on the local setup sheet. N<i>: a seat at the online table (the server checks it).
+      const [key, id] = t.dataset.color.split(':');
+      const i = +key.slice(1);
+      ui.picking = null;
+      if (key[0] === 'L') {
+        readSeatNames();
+        ui.seats[i].color = id;
+        if (i === 0 && ui.seats[0].kind === 'human') ui.color = id;
+      } else {
+        const room = ui.net && ui.net.room;
+        if (!room) return;
+        if (i === room.seat) ui.color = id;
+        netSend({ t: 'color', seat: i, color: id });
+      }
+      savePrefs();
+      return renderOverlay();
+    }
     if (t.dataset.deck) {
       readSeatNames();
       ui.deck = t.dataset.deck;
@@ -1750,11 +1803,11 @@
         ui.modal = { type: 'online' };
         return render();
       case 'net-create':
-        return netBegin({ t: 'create', name: netName(), opts: { table: ui.table, deck: ui.deck, level: ui.level } });
+        return netBegin({ t: 'create', name: netName(), color: ui.color, opts: { table: ui.table, deck: ui.deck, level: ui.level } });
       case 'net-join': {
         const code = (($('net-code') || {}).value || '').toUpperCase().trim();
         if (code.length !== 4) return toast('Enter the 4-letter game code.');
-        return netBegin({ t: 'join', code, name: netName() });
+        return netBegin({ t: 'join', code, name: netName(), color: ui.color });
       }
       case 'net-addbot':
         return netSend({ t: 'addbot' });
@@ -1789,7 +1842,7 @@
       }
       case 'again':
         if (ui.net) return netSend({ t: 'again' });
-        ui.seats = G().players.map((p) => ({ name: p.name, kind: p.kind }));
+        ui.seats = G().players.map((p) => ({ name: p.name, kind: p.kind, color: p.color }));
         return startGame(ui.seats);
       case 'see-board':
         ui.modal = null;
@@ -1886,6 +1939,13 @@
     }
   };
   const netHost = () => !!(ui.net && ui.net.room && ui.net.room.host === ui.net.room.seat);
+  // The picker key for an online seat whose color you may change (yours, or a computer's if
+  // you're the host), between games only. Null if not, or if the server doesn't know colors yet.
+  function netColorKey(room, i) {
+    const x = room.seats[i];
+    if (!x || !x.color || (room.started && !(ui.game && ui.game.phase === 'over'))) return null;
+    return i === room.seat || (room.host === room.seat && x.kind === 'bot') ? 'N' + i : null;
+  }
   function netName() {
     const el = $('net-name');
     const n = ((el && el.value) || ui.netName || '').trim().slice(0, 14);
@@ -1981,6 +2041,7 @@
       return;
     }
     if (m.t === 'room') {
+      if (!n.room || n.room.started !== m.started) ui.picking = null; // a game began or ended: close any picker
       n.room = m;
       if (!m.started && !ui.game) ui.modal = { type: 'online' };
       return ui.modal && ui.modal.type === 'online' ? renderOverlay() : render();
@@ -2090,7 +2151,7 @@
     const host = room.host === room.seat;
     const seats = room.seats
       .map(
-        (s, i) => `<div class="seat netseat"><span class="dot" style="background:${PCOLOR[i % 4]}"></span><span class="nm">${esc(s.name)}${i === room.seat ? ' <small>you</small>' : ''}${s.kind === 'bot' ? ' <small>computer</small>' : ''}${i === room.host ? ' <small>host</small>' : ''}${s.online ? '' : ' <small>away</small>'}</span>${host && i !== room.seat ? `<button type="button" class="x" data-netremove="${i}" aria-label="Remove ${esc(s.name)}">×</button>` : '<span></span>'}</div>`
+        (s, i) => `<div class="seat netseat">${dotHTML(hexOf(s.color, i), netColorKey(room, i), `${i === room.seat ? 'Your' : s.name + "'s"} color: ${(COLOR[s.color] || {}).name}`)}<span class="nm">${esc(s.name)}${i === room.seat ? ' <small>you</small>' : ''}${s.kind === 'bot' ? ' <small>computer</small>' : ''}${i === room.host ? ' <small>host</small>' : ''}${s.online ? '' : ' <small>away</small>'}</span>${host && i !== room.seat ? `<button type="button" class="x" data-netremove="${i}" aria-label="Remove ${esc(s.name)}">×</button>` : '<span></span>'}</div>${swatchesHTML('N' + i, room.seats, i)}`
       )
       .join('');
     return `<div class="sheet setup online" role="dialog" aria-modal="true" aria-labelledby="on-h">

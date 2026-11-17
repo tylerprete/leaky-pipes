@@ -702,6 +702,38 @@
     return game;
   }
 
+  // ---------- player colors ----------
+  // Picked per seat (a player's id is stored, not the hex). The first four are the defaults,
+  // chosen so they stay apart for the common color-vision deficiencies; the rest are extra
+  // picks. tools/palette.js checks contrast and separation.
+  const COLORS = [
+    { id: 'blue', name: 'Blue', hex: '#3aa0e6' },
+    { id: 'orange', name: 'Orange', hex: '#e0874a' },
+    { id: 'green', name: 'Green', hex: '#5fc58f' },
+    { id: 'pink', name: 'Pink', hex: '#cf59a0' },
+    { id: 'purple', name: 'Purple', hex: '#c58be0' },
+    { id: 'gold', name: 'Gold', hex: '#c8ad41' },
+    { id: 'teal', name: 'Teal', hex: '#35c4d4' },
+    { id: 'red', name: 'Red', hex: '#e44464' },
+  ];
+  const COLOR_IDS = COLORS.map((c) => c.id);
+  // The wanted color if nobody else has it, otherwise the first free one. taken: ids in use.
+  function pickColor(want, taken) {
+    const used = new Set(taken.filter(Boolean));
+    if (COLOR_IDS.includes(want) && !used.has(want)) return want;
+    return COLOR_IDS.find((c) => !used.has(c));
+  }
+  // Give every seat a color no one else at the table has, keeping the ones that are fine.
+  function fillColors(seats) {
+    const out = [];
+    for (const x of seats) out.push(x.color && !out.includes(x.color) && COLOR_IDS.includes(x.color) ? x.color : null);
+    seats.forEach((x, i) => {
+      if (!out[i]) out[i] = pickColor(null, out);
+      x.color = out[i];
+    });
+    return seats;
+  }
+
   // ---------- game ----------
   // The shared table has no edges: one big grid with the valves facing each other around the
   // middle, `gap` cells apart, so lines meet in the centre but can also run round the back.
@@ -740,7 +772,9 @@
         const v = shared ? lay.valves[i] : null;
         const board = shared ? newBoard(i, bw, bh, v.x, v.y, v.face) : newBoard(i, bw, bh, vx);
         if (endless || shared) board.spoutRule = opts.spoutRule || 'away';
-        return { name: s.name, kind: s.kind, hand: [], wrenches: opts.wrenches != null ? opts.wrenches : 2, board };
+        const pl = { name: s.name, kind: s.kind, hand: [], wrenches: opts.wrenches != null ? opts.wrenches : 2, board };
+        if (s.color) pl.color = s.color; // cosmetic: the engine and the bots never look at it
+        return pl;
       }),
       deck: [],
       discard: [],
@@ -961,7 +995,7 @@
     buildDeck, openingsOf, capAt, describeCard, capHasLeak,
     newBoard, cloneBoard, step, openEnds, capsInUse, leakAt, pieceLeaks, longestPath, progressOf,
     evalPipe, evalCap, attackCells, checkMove, boardAfter, spoutCell, analyze,
-    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, packGame, unpackGame, setCell, occOf, SHARED, withForeignPiece,
+    newGame, applyMove, legalMoves, deadEndWarning, nextRand, syncShared, sharedLayout, coversLeak, packGame, unpackGame, setCell, COLORS, COLOR_IDS, pickColor, fillColors, occOf, SHARED, withForeignPiece,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LP = Object.assign(root.LP || {}, api);
