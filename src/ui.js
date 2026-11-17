@@ -302,6 +302,9 @@
     ui._mv = { key, list };
     return list;
   }
+  // A leaky card that can replace an opponent's good pipe: the stronger play, so it is shown first.
+  const isSwap = (m) => m.type === 'cover' && m.target !== G().turn;
+  const firstTarget = (ms) => (ms.find(isSwap) || ms[0]).target;
   function closeModal() {
     const m = ui.modal;
     if (m && m.type === 'rules' && m.back && m.back.type === 'setup') {
@@ -552,6 +555,7 @@
       const match = !!m.flip === want || isSymmetric(ui.sel);
       if (!t || (match && !t.solid)) targets.set(m.i, { move: m, solid: match });
     }
+    const anySwap = selMoves().some(isSwap);
     if (ui.wrench && players.includes(g.turn)) {
       const lk = LP.leakAt(g.players[g.turn].board);
       if (lk >= 0) targets.set(lk, { move: null, solid: true });
@@ -579,9 +583,10 @@
       const [x, y] = pos(i);
       if (opts.main && t.move && card) {
         const f = t.solid ? want : !want;
-        out += `<g transform="translate(${x} ${y})" class="cardghost${ui.dragOver === i ? ' over' : ''}">${cardArt({ card, flip: card.kind === 'pipe' && isSymmetric(ui.sel) ? false : f })}</g>`;
+        out += `<g transform="translate(${x} ${y})" class="cardghost${isSwap(t.move) ? ' swap' : ''}${ui.dragOver === i ? ' over' : ''}">${cardArt({ card, flip: card.kind === 'pipe' && isSymmetric(ui.sel) ? false : f })}</g>`;
       }
-      out += `<rect class="target${t.solid ? '' : ' flipneed'}${opts.main && ui.dragOver === i ? ' over' : ''}" x="${x + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="5"/>`;
+      const rank = !anySwap || !t.move || t.move.target === g.turn ? '' : isSwap(t.move) ? ' swap' : ' minor';
+      out += `<rect class="target${t.solid ? '' : ' flipneed'}${rank}${opts.main && ui.dragOver === i ? ' over' : ''}" x="${x + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="5"/>`;
     }
     players.forEach((pi, k) => {
       const bb = boards[k];
@@ -646,11 +651,13 @@
     const extra = ms.map((m) => m.i);
     if (ui.botMark && ui.botMark.seq === g.seq) extra.push(ui.botMark.i);
     const own = ms.filter((m) => m.target === focus).map((m) => m.i);
-    // a card that can only go on someone else: frame that pipeline instead of mine
-    const away = !own.length && ms.length ? ms[0].target : -1;
-    const near = away >= 0 ? computeView([g.players[away].board], aspect, 6, 5, ms.filter((m) => m.target === away).map((m) => m.i)) : computeView(fb, aspect, 6, 5, own);
+    const near = computeView(fb, aspect, 6, 5, own);
     // most to least context; take the first that keeps cards readable
     const options = [computeView(all, aspect, 8, 6, extra), computeView(fb, aspect, 6, 5, extra), near];
+    // a card that can only go on other pipelines (a leak): stay wide enough to show every place
+    // it can go, even if the cards get small, rather than jumping to one opponent
+    const away = !own.length && ms.length > 0;
+    if (away) return px(options[0]) >= 28 ? options[0] : options[1];
     return options.find((v) => px(v) >= 28) || near;
   }
 
@@ -719,8 +726,9 @@
       const here = ms.filter((m) => m.target === ui.view).length;
       if (shared()) {
         const atk = ms.filter((m) => m.target !== g.turn).map((m) => g.players[m.target].name);
-        prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : atk.length ? `Drag or tap it onto a glowing slot to hit ${[...new Set(atk)].join(' or ')}.` : 'Drag or tap onto a glowing slot. Tap the card again to turn it.';
-      } else prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : here ? `Drag or tap onto a glowing slot on ${viewName}. Tap the card again to turn it.` : 'That card goes on another pipeline. Tap a board with a blue dot.';
+        const swp = [...new Set(ms.filter(isSwap).map((m) => g.players[m.target].name))];
+        prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : swp.length ? `Drop it on the orange card to replace ${swp.join(' or ')}'s good pipe, or on a blue slot to add the leak to the end.` : atk.length ? `Drag or tap it onto a glowing slot to hit ${[...new Set(atk)].join(' or ')}.` : 'Drag or tap onto a glowing slot. Tap the card again to turn it.';
+      } else prompt = !ms.length ? "That card can't be played right now. Discard it or pick another." : here && ms.some((m) => isSwap(m) && m.target === ui.view) ? `Drop it on the orange card to replace ${g.players[ui.view].name}'s good pipe, or on a blue slot to add the leak to the end.` : here ? `Drag or tap onto a glowing slot on ${viewName}. Tap the card again to turn it.` : 'That card goes on another pipeline. Tap a board with a blue dot.';
     } else {
       const mine = g.players[g.turn].board;
       prompt = LP.leakAt(mine) >= 0 ? 'Your pipeline is leaking. Cover it with the same shape, use a wrench, or discard.' : `${humans() > 1 ? cur.name + ', your' : 'Your'} turn. Pick a card.`;
@@ -1232,7 +1240,7 @@
     sfx.pick();
     if (g.phase === 'play') {
       const ms = selMoves();
-      if (ms.length && !ms.some((m) => m.target === ui.view)) ui.view = ms[0].target;
+      if (ms.length && !ms.some((m) => m.target === ui.view)) ui.view = firstTarget(ms);
     }
     render();
   }
@@ -1302,7 +1310,7 @@
         ui.sel = d.id;
         if (G().phase === 'play') {
           const ms = selMoves();
-          if (ms.length && !ms.some((m) => m.target === ui.view)) ui.view = ms[0].target;
+          if (ms.length && !ms.some((m) => m.target === ui.view)) ui.view = firstTarget(ms);
         }
       }
       clearGhosts();

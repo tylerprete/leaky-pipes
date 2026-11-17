@@ -246,6 +246,11 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 #board .cardghost { opacity: .42; pointer-events: none; }
 #board .cardghost.over { opacity: .85; }
 #board .target.over { stroke-width: 4; fill: rgba(58,160,230,.32); }
+/* a leak that can replace an opponent's good pipe: loud; the end-of-line slots step back */
+#board .target.swap { stroke: var(--copper); stroke-width: 4.5; fill: rgba(217,134,74,.26); }
+#board .target.swap.over { stroke-width: 5.5; fill: rgba(217,134,74,.4); }
+#board .target.minor { stroke-width: 2; fill: rgba(58,160,230,.08); filter: none; animation: none; stroke-opacity: .7; }
+#board .cardghost.swap { opacity: .7; }
 #board .botmark { fill: none; stroke: var(--copper); stroke-width: 3; pointer-events: none; animation: fadeRing 1.8s ease-out forwards; }
 @keyframes fadeRing { 0% { opacity: 1; } 70% { opacity: .9; } 100% { opacity: 0; } }
 #board .hintmark { fill: none; stroke: #f4c95d; stroke-width: 3; stroke-dasharray: 8 5; pointer-events: none; animation: march 1s linear infinite; }
@@ -362,6 +367,8 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 .minisvg .slot { fill: rgba(255,255,255,.02); stroke: none; }
 .minisvg .target { fill: rgba(58,160,230,.25); stroke: var(--water); stroke-width: 4; animation: pulse 1.4s ease-in-out infinite; }
 .minisvg .target.flipneed { stroke-dasharray: 8 5; fill: rgba(58,160,230,.1); }
+.minisvg .target.swap { stroke: var(--copper); stroke-width: 6; fill: rgba(217,134,74,.3); }
+.minisvg .target.minor { stroke-width: 3; fill: rgba(58,160,230,.08); animation: none; stroke-opacity: .7; }
 .minisvg .leakring { fill: none; stroke: var(--danger); stroke-width: 4; stroke-dasharray: 6 4; }
 .minisvg .lastmark { fill: var(--copper); }
 .minisvg .botmark { fill: none; stroke: var(--copper); stroke-width: 4; animation: fadeRing 2.4s ease-out forwards; }
