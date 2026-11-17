@@ -20,7 +20,7 @@ Play it at https://tylerprete.github.io/leaky-pipes/ (GitHub Pages serves `docs/
 Games against computers and pass-and-play need nothing but the static page. Playing across browsers needs a game server. There are two hosts for the same room logic (`server/room.js`):
 
 - **Cloudflare Workers** (`cloudflare/`): a Worker plus a Durable Object per room. No machine to run, and rooms survive restarts. See `cloudflare/README.md`.
-- **Node** (`server/server.js`): one process for a VM or container. See `deploy/README.md`.
+- **Node** (`server/server.js`): one process, for running it yourself.
 
 The Node server, locally:
 
@@ -34,11 +34,15 @@ npm run server        # http://localhost:8787 serves the page and the game socke
 - One person creates a game and shares the 4-letter code or invite link. Up to 4 seats, any mix of people and computers.
 - A dropped player keeps their seat: reopening the page resumes it. After 30 seconds away on their turn, a computer plays for them until they return.
 - On the Node server, games live in memory, so a restart ends them and it must run as a single instance. The Cloudflare version saves each room and has neither limit.
-- Deploy anywhere that runs a container and allows WebSockets. `deploy/` has a ready setup (Docker Compose with Caddy for HTTPS) and step-by-step notes for a free Oracle Cloud instance.
+- Players can send each other quick reactions during a game.
 - To make the GitHub Pages copy offer online play, bake the address in: `LEAKY_SERVER=wss://your-host npm run build`. A `?server=wss://your-host` link also works without rebuilding.
 - Settings: `PORT`, `MAX_ROOMS` (500), `AWAY_MS` (30000), `BOT_MS` (900).
 
-Test: `node test/online.js` plays a full game with two browsers and a computer, including a disconnect and resume.
+Test: `node test/online.js` plays a full game with two browsers and a computer, including a reaction, a disconnect and a resume.
+
+## Offline
+
+After one visit the game opens with no connection, for games against the computer and pass-and-play. A small service worker (`src/sw.js`, built to `docs/sw.js`) keeps a copy of the page and its icons. With a connection the page is always fetched fresh, so a new version shows up on the next load; the saved copy is only used when the network doesn't answer within 2.5 seconds. `node test/offline.js` checks it on a static site in a sub-folder, the Node server and (with `CF=1`) the Cloudflare Worker.
 
 ## Code
 

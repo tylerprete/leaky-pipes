@@ -24,9 +24,12 @@
     { "name": "CREATE_LIMIT", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } }
   ],
   "vars": {
-    // strongest computer level allowed. "hard" needs far more CPU per move than the free
-    // plan's limit, so keep "normal" unless you are on the paid plan.
-    "MAX_LEVEL": "normal",
+    // strongest computer level allowed. Hard needs hundreds of milliseconds of CPU per move, far
+    // more than one event may use here, so the room runs it HARD_SLICE units at a time, one piece
+    // per "tick" message from a player's page (server/room.js). Raise HARD_SLICE on the paid plan.
+    "MAX_LEVEL": "hard",
+    "HARD_SLICE": "2",
+    "THINK_MS": "2600", // extra time a Hard computer may take before it moves with what it has
     "BOT_MS": "900", // pause before a computer moves
     "AWAY_MS": "30000" // a computer covers for an absent player after this long
   }

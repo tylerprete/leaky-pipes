@@ -707,7 +707,10 @@
   // middle, `gap` cells apart, so lines meet in the centre but can also run round the back.
   // Spacing picked with self-play (tools/results/shared-*.txt).
   const SHARED = 45;
-  const SHARED_GAP = { 2: 11, 3: 11, 4: 11 };
+  // Cells between facing valves. With two players a wide gap let the pipelines pass without ever
+  // meeting (8% of games); three cells puts them in each other's way in about 5 games out of 6,
+  // with no change to how long games run. tools/shared-meet.js, tools/results/shared-meet.txt
+  const SHARED_GAP = { 2: 3, 3: 11, 4: 11 };
   function sharedLayout(n, lay) {
     if (lay && typeof lay === 'object' && lay.valves) return lay; // custom {w,h,valves}
     const gap = (lay && lay.gap) || SHARED_GAP[n];

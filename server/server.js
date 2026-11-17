@@ -116,11 +116,12 @@ const server = http.createServer((req, res) => {
     }
   }
   // the page's icon files
-  const STATIC = { '/icon.svg': 'image/svg+xml', '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png', '/manifest.webmanifest': 'application/manifest+json' };
+  const STATIC = { '/icon.svg': 'image/svg+xml', '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png', '/manifest.webmanifest': 'application/manifest+json', '/sw.js': 'text/javascript' };
   if (STATIC[url]) {
     try {
       const body = fs.readFileSync(path.join(__dirname, '..', 'docs', url.slice(1)));
-      res.writeHead(200, { 'content-type': STATIC[url], 'cache-control': 'public, max-age=86400' });
+      // the service worker must be re-checked on every visit, or an old one could linger
+      res.writeHead(200, { 'content-type': STATIC[url], 'cache-control': url === '/sw.js' ? 'no-cache' : 'public, max-age=86400' });
       return res.end(body);
     } catch (e) {
       /* fall through to 404 */

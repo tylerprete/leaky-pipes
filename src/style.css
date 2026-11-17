@@ -255,14 +255,41 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 @keyframes fadeRing { 0% { opacity: 1; } 70% { opacity: .9; } 100% { opacity: 0; } }
 #board .hintmark { fill: none; stroke: #f4c95d; stroke-width: 3; stroke-dasharray: 8 5; pointer-events: none; animation: march 1s linear infinite; }
 @keyframes march { to { stroke-dashoffset: -26; } }
-#board .water { fill: none; stroke: #59c2ff; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: .9; pointer-events: none;
-  stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: flow var(--dur) ease-in-out .2s forwards; filter: url(#glow); }
-#board .water-shine { fill: none; stroke: #e9f8ff; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 5 16; opacity: 0; pointer-events: none;
-  animation: shimmer .7s linear infinite, fadein .5s ease calc(var(--dur) + .2s) forwards; }
+/* The win: water runs the pipeline from the valve, lighting each card as it passes, and pours out
+   at the spout. Every part is timed from --t0 (when the game ended, as a negative delay), so
+   redrawing the table continues the animation instead of restarting it. */
+#board .winflow { pointer-events: none; }
+#board .water { fill: none; stroke: #59c2ff; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: .9;
+  stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: flow var(--dur) linear calc(var(--t0) + .2s) forwards; filter: url(#glow); }
+#board .water-shine { fill: none; stroke: #e9f8ff; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 5 16; opacity: 0;
+  animation: shimmer .7s linear infinite, fadein .5s ease calc(var(--t0) + var(--dur) + .2s) forwards; }
+/* the front of the water: one round dot that rides the path */
+#board .water-head { fill: none; stroke: #f2fbff; stroke-width: 12; stroke-linecap: round; filter: url(#glow); opacity: 0;
+  animation: head var(--dur) linear calc(var(--t0) + .2s) forwards; }
+#board .wet { fill: #59c2ff; opacity: 0; animation: wet .9s ease-out calc(var(--t0) + var(--d)) forwards; }
+#board .stream { fill: #3aa0e6; opacity: 0; transform-box: fill-box; transform-origin: 50% 0;
+  animation: stream .25s ease-out calc(var(--t0) + var(--dur) + .2s) forwards, wobble .5s ease-in-out calc(var(--t0) + var(--dur) + .45s) infinite alternate; }
+#board .puddle { fill: #3aa0e6; opacity: 0; transform-box: fill-box; transform-origin: 50% 50%;
+  animation: puddle 1.6s cubic-bezier(.2,.7,.3,1) calc(var(--t0) + var(--dur) + .35s) forwards; }
+#board .spl { fill: #8fd6ff; stroke: #e9f8ff; stroke-width: .5; opacity: 0;
+  animation: spl .95s linear calc(var(--t0) + var(--dur) + .3s + var(--sd)) infinite; }
 @keyframes flow { to { stroke-dashoffset: 0; } }
+@keyframes head { 0% { stroke-dashoffset: 0; opacity: 1; } 96% { opacity: 1; } 100% { stroke-dashoffset: var(--neg); opacity: 0; } }
+@keyframes wet { 0% { opacity: 0; } 25% { opacity: .5; } 100% { opacity: .13; } }
+@keyframes stream { from { opacity: .9; transform: scaleY(0); } to { opacity: .9; transform: scaleY(1); } }
+@keyframes wobble { from { transform: scaleX(.8); } to { transform: scaleX(1.15); } }
+@keyframes puddle { from { opacity: .55; transform: scale(.1); } to { opacity: .4; transform: scale(1); } }
+/* a drop: up and out, then down (two straight legs with the speed eased to look like an arc) */
+@keyframes spl {
+  0% { opacity: 0; transform: translate(0, 0); animation-timing-function: cubic-bezier(.2,.7,.5,1); }
+  8% { opacity: 1; }
+  45% { opacity: 1; transform: translate(var(--ux), var(--uy)); animation-timing-function: cubic-bezier(.5,0,.9,.6); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)); }
+}
 @keyframes shimmer { to { stroke-dashoffset: -21; } }
 @keyframes fadein { to { opacity: .8; } }
-#board .pour { animation: pour 1s ease-in-out infinite alternate; }
+/* the spout's own trickle waits for the water (--arrive is set on the table when someone has won) */
+#board .pour { opacity: 0; animation: fadein .2s linear var(--arrive, 0s) forwards, pour 1s ease-in-out calc(var(--arrive, 0s) + .2s) infinite alternate; }
 @keyframes pour { from { opacity: .7; } to { opacity: 1; } }
 
 .status { cursor: pointer; border-radius: 10px; padding: 2px 4px; margin: 0 -4px; }
@@ -400,3 +427,24 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 .netseat { grid-template-columns: auto 1fr auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: #1d272f; }
 .netseat .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .netseat small { font: 600 11px/1 var(--body); color: var(--muted); margin-left: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  /* no motion: show the finished picture */
+  #board .water { stroke-dashoffset: 0; }
+  #board .wet { opacity: .13; }
+  #board .stream { opacity: .9; }
+  #board .puddle { opacity: .4; }
+  #board .pour { opacity: 1; }
+}
+
+/* ---------- online reactions ---------- */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.btn.emoji { font-size: 20px; line-height: 1; padding: 6px 10px; position: relative; }
+.reactrow { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; flex-basis: 100%; animation: reactin .18s ease-out; }
+#reacts { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 30; }
+.react { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 8px; border-radius: 999px; background: #0f171d; border: 2px solid var(--pc);
+  box-shadow: 0 6px 18px rgba(0,0,0,.45); animation: reactin .28s cubic-bezier(.2,1.5,.4,1), reactout .45s ease 2.5s forwards; }
+.react b { font-size: 30px; line-height: 1; font-weight: 400; }
+.react span { display: flex; flex-direction: column; font: 600 13px/1.15 var(--body); color: var(--ink); }
+.react span i { font-style: normal; font-weight: 400; font-size: 12px; color: var(--muted); }
+@keyframes reactin { from { transform: translateY(-8px) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes reactout { to { transform: translateY(-10px); opacity: 0; } }

@@ -94,6 +94,35 @@
     o.start(t);
     o.stop(t + dur + 0.02);
   }
+  // Water running through the pipes for `dur` seconds, rising as it goes, then a splash.
+  function rush(dur) {
+    const a = audio();
+    if (!a) return;
+    const total = dur + 0.9;
+    const n = Math.floor(a.sampleRate * total);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const f = a.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 0.9;
+    const g = a.createGain();
+    const t = a.currentTime + 0.2;
+    f.frequency.setValueAtTime(260, t);
+    f.frequency.exponentialRampToValueAtTime(1100, t + dur); // the pipe fills
+    f.frequency.exponentialRampToValueAtTime(2600, t + dur + 0.12); // it hits the open air
+    f.frequency.exponentialRampToValueAtTime(900, t + total - 0.2);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.03, t + Math.min(0.5, dur / 2));
+    g.gain.setValueAtTime(0.03, t + dur);
+    g.gain.exponentialRampToValueAtTime(0.09, t + dur + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + total - 0.2);
+    src.connect(f).connect(g).connect(a.destination);
+    src.start(t);
+    src.stop(t + total);
+  }
   function hiss(dur, vol) {
     const a = audio();
     if (!a) return;
@@ -125,6 +154,7 @@
     nope: () => tone(220, 0.12, { type: 'triangle', vol: 0.04, to: 160 }),
     win: () => [523, 659, 784, 1047].forEach((f, k) => tone(f, 0.22, { type: 'triangle', vol: 0.05, delay: k * 0.11 })),
     lose: () => [392, 330, 262].forEach((f, k) => tone(f, 0.25, { type: 'triangle', vol: 0.04, delay: k * 0.14 })),
+    flow: (dur) => rush(dur),
   };
 
   // ---------------------------------------------------------------- art
@@ -535,6 +565,8 @@
     ui.vbRaf = requestAnimationFrame(step);
   }
 
+  // How long the water takes to run a path of n cells (for the win animation).
+  const flowSeconds = (n) => Math.min(4, 0.18 * n);
   // Cells along the water's path from valve to spout (for the win animation).
   function waterPath(b) {
     if (b.spout < 0) return [];
@@ -628,6 +660,7 @@
     const H = b.h * CH + (b.h - 1) * GAP;
     const vb = opts.view;
     const pos = (i) => [(i % b.w) * (CW + GAP), Math.floor(i / b.w) * (CH + GAP)];
+    let arrive = null; // when the winner's water reaches the spout, on the animation clock
     const boxes = opts.main ? [ui.vb, ui.vbTarget].filter(Boolean) : [vb];
     const cx0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[0])) / (CW + GAP)) - 1);
     const cy0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[1])) / (CH + GAP)) - 1);
@@ -695,16 +728,71 @@
       if (g.phase === 'over' && g.winner === pi) {
         const path = waterPath(bb);
         if (path.length > 1) {
-          const pts = path.map((i) => {
+          // The water follows the pipes: straight through a straight, round the bend of an elbow.
+          const dirOf = (a, c) => (c === a - b.w ? 'N' : c === a + b.w ? 'S' : c === a + 1 ? 'E' : 'W');
+          const at = (i, [ox, oy]) => {
             const [x, y] = pos(i);
-            return [x + 25, y + 35];
-          });
-          const [sx, sy] = pos(bb.spout);
-          pts[pts.length - 1] = [sx + (bb.spoutDir === 'E' ? 27 : 23), sy + 50];
+            return [x + ox, y + oy];
+          };
+          const segs = []; // ['L', point] or ['Q', control, point]
+          let cur = at(path[0], [25, 35]);
+          const start = cur;
           let len = 0;
-          for (let q = 1; q < pts.length; q++) len += Math.abs(pts[q][0] - pts[q - 1][0]) + Math.abs(pts[q][1] - pts[q - 1][1]);
-          const d = 'M' + pts.map((q) => q.join(',')).join(' L');
-          out += `<g style="--len:${len.toFixed(0)};--dur:${Math.min(4, 0.18 * path.length).toFixed(2)}s"><path class="water" d="${d}"/><path class="water-shine" d="${d}"/></g>`;
+          const line = (q) => {
+            len += Math.hypot(q[0] - cur[0], q[1] - cur[1]);
+            segs.push('L' + q);
+            cur = q;
+          };
+          const bend = (c, q) => {
+            let prev = cur;
+            for (let t = 1; t <= 8; t++) {
+              const u = t / 8;
+              const pt = [(1 - u) * (1 - u) * cur[0] + 2 * u * (1 - u) * c[0] + u * u * q[0], (1 - u) * (1 - u) * cur[1] + 2 * u * (1 - u) * c[1] + u * u * q[1]];
+              len += Math.hypot(pt[0] - prev[0], pt[1] - prev[1]);
+              prev = pt;
+            }
+            segs.push('Q' + c + ' ' + q);
+            cur = q;
+          };
+          line(at(path[0], MID[dirOf(path[0], path[1])]));
+          for (let k = 1; k < path.length - 1; k++) {
+            const inD = OPP[dirOf(path[k - 1], path[k])];
+            const outD = dirOf(path[k], path[k + 1]);
+            const piece = bb.cells[path[k]];
+            line(at(path[k], MID[inD]));
+            if (OPP[inD] === outD) line(at(path[k], MID[outD]));
+            else if (LP.openingsOf(piece.card, piece.flip).length > 2) {
+              line(at(path[k], [25, 35])); // a T turns square at its middle
+              line(at(path[k], MID[outD]));
+            } else bend(at(path[k], [25, 35]), at(path[k], MID[outD]));
+          }
+          // into the spout and down out of its mouth (the art is mirrored when it pours to the right)
+          const sp = bb.spout;
+          const mir = bb.spoutDir === 'E';
+          const fx = (x) => (mir ? 50 - x : x);
+          line(at(sp, [fx(50), 35]));
+          line(at(sp, [fx(36), 35]));
+          bend(at(sp, [fx(23), 35]), at(sp, [fx(23), 48]));
+          line(at(sp, [fx(23), 58]));
+          const d = 'M' + start + ' ' + segs.join(' ');
+          const mouth = at(sp, [fx(23), 70]);
+          const dur = flowSeconds(path.length);
+          // --t0 puts every part on one clock that started when the game ended, so a redraw
+          // (the result sheet opening, a resize) carries on mid-flow instead of starting over
+          const t0 = ui.winAt ? -(performance.now() - ui.winAt) / 1000 : -60;
+          // each card lights up as the water reaches it
+          const wet = path.map((i, k) => {
+            const [x, y] = pos(i);
+            return `<rect class="wet" x="${x}" y="${y}" width="${CW}" height="${CH}" rx="5" style="--d:${(0.2 + (dur * k) / (path.length - 1)).toFixed(2)}s"/>`;
+          });
+          // at the spout: a stream, a puddle, and drops thrown off in arcs
+          const [mx, my] = mouth;
+          const drops = [[-17, -13, -30, 24, 0], [15, -16, 27, 26, 0.12], [-8, -20, -15, 30, 0.27], [9, -11, 19, 22, 0.4], [-22, -7, -36, 18, 0.52], [21, -9, 35, 20, 0.66], [-4, -15, -8, 28, 0.78], [5, -19, 10, 31, 0.9]]
+            .map(([ux, uy, dx, dy, sd]) => `<circle class="spl" r="2.3" style="--ux:${ux}px;--uy:${uy}px;--dx:${dx}px;--dy:${dy}px;--sd:${sd}s"/>`)
+            .join('');
+          const splash = `<g transform="translate(${mx} ${my})"><ellipse class="puddle" cx="0" cy="26" rx="26" ry="5"/><rect class="stream" x="-4" y="-2" width="8" height="28" rx="4"/><g transform="translate(0 24)">${drops}</g></g>`;
+          out += `<g class="winflow" style="--len:${len.toFixed(0)};--neg:${(-len).toFixed(0)};--dur:${dur.toFixed(2)}s;--t0:${t0.toFixed(2)}s">${wet.join('')}<path class="water" d="${d}"/><path class="water-shine" d="${d}"/><path class="water-head" d="${d}" style="stroke-dasharray:0.01 ${(len + 40).toFixed(0)}"/>${splash}</g>`;
+          arrive = t0 + 0.2 + dur;
         }
       }
     });
@@ -723,6 +811,9 @@
         out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
       }
     }
+    // the spout itself only starts pouring once the water gets there
+    if (arrive != null) svg.style.setProperty('--arrive', arrive.toFixed(2) + 's');
+    else svg.style.removeProperty('--arrive');
     svg.innerHTML = out;
     return targets.size;
   }
@@ -895,7 +986,38 @@
       `<button type="button" class="btn ${ui.wrench ? 'on' : ''}" data-act="wrench" ${canWrench ? '' : 'disabled'} title="Wrench (W)">${ICON.wrench}Wrench ${wrenchCount}</button>` +
       (myTurn && !me.hand.length && g.phase === 'play'
         ? `<button type="button" class="btn primary" data-act="pass">Pass (no cards)</button>`
-        : `<button type="button" class="btn" data-act="hint" ${myTurn ? '' : 'disabled'} title="Hint (H)">${ICON.bulb}Hint</button>`);
+        : `<button type="button" class="btn" data-act="hint" ${myTurn ? '' : 'disabled'} title="Hint (H)">${ICON.bulb}Hint</button>`) +
+      // online: quick reactions for the other players
+      (ui.net
+        ? `<button type="button" class="btn emoji ${ui.reactOpen ? 'on' : ''}" data-act="react" aria-expanded="${!!ui.reactOpen}" title="React">${REACTIONS[1].e}<span class="sr">React</span></button>` +
+          (ui.reactOpen ? `<div class="reactrow" role="group" aria-label="Reactions">${REACTIONS.map((r, k) => `<button type="button" class="btn emoji" data-react="${k}" title="${r.label}">${r.e}<span class="sr">${r.label}</span></button>`).join('')}</div>` : '')
+        : '');
+  }
+  // Quick reactions for online games. The server only passes on the number (see server/room.js).
+  const REACTIONS = [
+    { e: '👍', label: 'Nice' },
+    { e: '😂', label: 'Ha!' },
+    { e: '😮', label: 'Whoa' },
+    { e: '😭', label: 'Ouch' },
+    { e: '😡', label: 'Grr' },
+    { e: '💧', label: 'Leak!' },
+    { e: '🔧', label: 'Fixed' },
+    { e: '🏆', label: 'Good game' },
+  ];
+  function showReaction(seat, k) {
+    const r = REACTIONS[k];
+    const room = ui.net && ui.net.room;
+    if (!r || !room || !room.seats[seat]) return;
+    const el = document.createElement('div');
+    el.className = 'react';
+    el.style.setProperty('--pc', PCOLOR[seat % 4]);
+    el.innerHTML = `<b>${r.e}</b><span>${seat === room.seat ? 'You' : esc(room.seats[seat].name)}<i>${r.label}</i></span>`;
+    const box = $('reacts');
+    box.style.top = Math.round($('boardwrap').getBoundingClientRect().top + 10) + 'px'; // over the top of the table, clear of the names
+    box.appendChild(el);
+    while (box.children.length > 4) box.removeChild(box.firstChild);
+    setTimeout(() => el.remove(), 3000);
+    if (seat !== room.seat) sfx.pick();
   }
 
   // ---------------------------------------------------------------- overlays
@@ -1124,15 +1246,19 @@
     if (g.phase === 'over') {
       ui.busy = false;
       ui.view = g.winner >= 0 ? g.winner : ui.view;
-      render();
       const humanWon = g.winner >= 0 && g.players[g.winner].kind === 'human';
+      // the water runs the winner's pipeline; the result sheet waits until it has poured
+      const flow = g.winner >= 0 ? flowSeconds(waterPath(g.players[g.winner].board).length) : 0;
+      ui.winAt = performance.now();
+      render();
       (humanWon ? sfx.win : sfx.lose)();
+      if (flow && !REDUCED) sfx.flow(flow);
       const gen = ui.gen;
       setTimeout(() => {
         if (gen !== ui.gen) return;
         ui.modal = { type: 'over' };
         render();
-      }, REDUCED ? 200 : 2600);
+      }, REDUCED ? 200 : Math.max(2600, (0.2 + flow + 1.5) * 1000));
       return;
     }
     if (ui.net) {
@@ -1502,9 +1628,17 @@
   // ---------------------------------------------------------------- events
   document.addEventListener('click', (ev) => {
     if (ui.suppressClick) return;
-    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck],[data-netremove]');
+    const t = ev.target.closest('[data-act],[data-card],[data-view],[data-i],[data-kind],[data-remove],[data-level],[data-table],[data-deck],[data-netremove],[data-react]');
     if (!t) return;
     audio();
+    if (t.dataset.react != null) {
+      ui.reactOpen = false;
+      if (Date.now() - (ui.reactAt || 0) > 1000) {
+        ui.reactAt = Date.now();
+        netSend({ t: 'react', k: +t.dataset.react });
+      }
+      return renderActions();
+    }
     if (t.dataset.i != null && t.closest('#board')) return tryCell(+t.dataset.i);
     if (t.dataset.view != null) {
       if (shared()) {
@@ -1561,6 +1695,9 @@
       case 'discard':
         if (ui.sel && isHumanTurn()) play({ type: 'discard', cardId: ui.sel });
         return;
+      case 'react':
+        ui.reactOpen = !ui.reactOpen;
+        return renderActions();
       case 'wrench':
         ui.wrench = !ui.wrench;
         ui.sel = null;
@@ -1656,6 +1793,7 @@
         return startGame(ui.seats);
       case 'see-board':
         ui.modal = null;
+        ui.winAt = performance.now(); // watch the water run again
         return render();
     }
   });
@@ -1847,6 +1985,14 @@
       if (!m.started && !ui.game) ui.modal = { type: 'online' };
       return ui.modal && ui.modal.type === 'online' ? renderOverlay() : render();
     }
+    if (m.t === 'react') return showReaction(m.seat | 0, m.k | 0);
+    if (m.t === 'think') {
+      // A Hard computer is thinking on the server, a piece per message from here. The ticks say
+      // nothing and decide nothing; they only give the server a reason to run again.
+      const ws = n.ws;
+      for (let k = 0; k < Math.min(m.n | 0, 2000) && ws && ws.readyState === 1; k++) ws.send('{"t":"tick"}');
+      return;
+    }
     if (m.t === 'gone') {
       netLeave();
       ui.modal = { type: 'setup' };
@@ -1999,6 +2145,11 @@
     } else if (room) ui.modal = { type: 'online', code: room };
   }
   render();
+  // Offline support: a service worker keeps a copy of this page so it opens with no connection
+  // (see src/sw.js). Not when opened from a file, or embedded in another page.
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && window.top === window) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
   window.__leaky = ui;
   window.__leakyBrain = brain;
   window.__leakyStart = (seats) => startGame(seats);

@@ -39,7 +39,9 @@ const until = async (f, what) => { for (let k = 0; k < 100; k++) { if (f()) retu
     await a.open;
     a.send({ t: 'create', name: 'Ann', opts: { table: 'shared', deck: 'tuned', level: 'hard' } });
     await until(() => a.room, 'room');
-    if (a.room.opts.level !== 'normal') throw new Error('hard should be capped to normal by default, got ' + a.room.opts.level);
+    // Hard is allowed (thought out a piece per "tick"). This client sends no ticks, as an old page
+    // wouldn't, so the computer must fall back to Normal moves and the game must still run.
+    if (a.room.opts.level !== 'hard') throw new Error('hard should be allowed, got ' + a.room.opts.level);
     a.send({ t: 'addbot' });
     await until(() => a.room.seats.length === 2, 'bot seat');
     a.send({ t: 'start' });

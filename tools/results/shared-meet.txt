@@ -1,0 +1,18 @@
+2 players, tuned deck, 1 games each
+touch = games where the pipelines end up side by side; squeezed = share of turns where the other pipeline left the mover fewer places to build
+Before the change the 2-player gap was 11. Chosen: facing gap 3.
+crossing paths (3 and 5)             touch  46%  games with a squeeze  36%  squeezed turns  3.8%  closest  2.4  first touch turn 24 | stuck 0.11 rounds 20.8 stall 0.000 first-player wins 0.52 seat0 0.51 attacks 0.18
+crossing paths (4 from the corner)   touch  53%  games with a squeeze  43%  squeezed turns  4.7%  closest  2.1  first touch turn 19 | stuck 0.12 rounds 22.3 stall 0.007 first-player wins 0.54 seat0 0.48 attacks 0.18
+facing gap 1                         touch   0%  games with a squeeze 100%  squeezed turns 70.0%  closest  2.0  first touch turn - | stuck 1.00 rounds 300.5 stall 1.000 first-player wins 0.00 seat0 0.00 attacks 0.00
+facing gap 11 (now)                  touch   9%  games with a squeeze   6%  squeezed turns  0.4%  closest  6.1  first touch turn 32 | stuck 0.09 rounds 20.1 stall 0.000 first-player wins 0.51 seat0 0.52 attacks 0.18
+facing gap 2                         touch 100%  games with a squeeze  95%  squeezed turns 11.8%  closest  1.0  first touch turn 3 | stuck 0.12 rounds 23.4 stall 0.010 first-player wins 0.54 seat0 0.51 attacks 0.18
+facing gap 3                         touch  86%  games with a squeeze  74%  squeezed turns  8.5%  closest  1.1  first touch turn 7 | stuck 0.11 rounds 20.7 stall 0.000 first-player wins 0.53 seat0 0.54 attacks 0.18
+facing gap 3, rows 1 apart           touch  77%  games with a squeeze  67%  squeezed turns  7.7%  closest  1.3  first touch turn 9 | stuck 0.12 rounds 20.7 stall 0.000 first-player wins 0.48 seat0 0.50 attacks 0.18
+facing gap 3, rows 2 apart           touch  74%  games with a squeeze  63%  squeezed turns  7.0%  closest  1.4  first touch turn 11 | stuck 0.11 rounds 20.4 stall 0.000 first-player wins 0.52 seat0 0.52 attacks 0.18
+facing gap 4                         touch  72%  games with a squeeze  62%  squeezed turns  6.6%  closest  1.4  first touch turn 13 | stuck 0.11 rounds 20.3 stall 0.000 first-player wins 0.54 seat0 0.50 attacks 0.18
+facing gap 5                         touch  59%  games with a squeeze  47%  squeezed turns  5.8%  closest  1.7  first touch turn 17 | stuck 0.11 rounds 20.1 stall 0.000 first-player wins 0.54 seat0 0.51 attacks 0.18
+facing gap 5, rows 1 apart           touch  59%  games with a squeeze  48%  squeezed turns  5.6%  closest  1.8  first touch turn 17 | stuck 0.11 rounds 20.2 stall 0.000 first-player wins 0.49 seat0 0.48 attacks 0.18
+facing gap 7                         touch  37%  games with a squeeze  29%  squeezed turns  2.8%  closest  2.8  first touch turn 25 | stuck 0.10 rounds 20.5 stall 0.000 first-player wins 0.53 seat0 0.51 attacks 0.18
+facing gap 7, rows 1 apart           touch  34%  games with a squeeze  30%  squeezed turns  3.4%  closest  2.9  first touch turn 24 | stuck 0.10 rounds 21.2 stall 0.003 first-player wins 0.52 seat0 0.49 attacks 0.18
+side by side, same way, 2 apart      touch  70%  games with a squeeze  63%  squeezed turns  9.3%  closest  1.3  first touch turn 11 | stuck 0.13 rounds 23.8 stall 0.010 first-player wins 0.47 seat0 0.53 attacks 0.17
+side by side, same way, 3 apart      touch  69%  games with a squeeze  58%  squeezed turns  7.3%  closest  1.5  first touch turn 13 | stuck 0.12 rounds 22.4 stall 0.007 first-player wins 0.50 seat0 0.51 attacks 0.18

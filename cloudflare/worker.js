@@ -6,7 +6,7 @@
  *   (server/room.js). What differs is the plumbing:
  *     sockets   WebSocket Hibernation API, so an idle room can be evicted from memory while
  *               its sockets stay open; each socket carries its connection id as a tag
- *     state     saved to the object's storage after every message, reloaded on wake-up
+ *     state     saved to the object's storage after every message (one write), reloaded on wake-up
  *     timers    one alarm per room: the next computer move, or a clean-up when idle
  *
  * Guards against abuse (the page is public, so anyone can open sockets to it):
@@ -23,6 +23,8 @@ const CLAIM_MS = 60 * 1000; // a new room's socket must send "create" within thi
 const MAX_SOCKETS = 12; // per room: four seats, plus reconnects that overlap the socket they replace
 const FLOOD_N = 40; // messages allowed per socket ...
 const FLOOD_MS = 10 * 1000; // ... in this window (same guard as the Node server)
+const TICK = '{"t":"tick"}'; // exactly what the page sends, so a tick is recognised without parsing
+const TICK_N = 6000; // ticks allowed per socket per window: a four-player game with three computers needs about 1000 a round
 const NO_ROOM = "That game code doesn't exist (or the game has ended).";
 
 // Answer a WebSocket request with one message and a close, without keeping the socket.
@@ -45,6 +47,9 @@ export class GameRoom extends DurableObject {
     // message counts per socket. Kept in memory only: a room is evicted from memory only after
     // its sockets have gone quiet, and a quiet socket's count would have reset anyway.
     this.rate = new Map();
+    this.alarmAt = null; // set by load()
+    this.kind = 'idle';
+    this.at = 0;
   }
 
   io() {
@@ -75,7 +80,17 @@ export class GameRoom extends DurableObject {
     };
   }
   cfg() {
-    return { botMs: +this.env.BOT_MS || 900, awayMs: +this.env.AWAY_MS || 30000, maxLevel: this.env.MAX_LEVEL || 'normal' };
+    return {
+      botMs: +this.env.BOT_MS || 900,
+      awayMs: +this.env.AWAY_MS || 30000,
+      maxLevel: this.env.MAX_LEVEL || 'normal',
+      // Hard is far too much work for one event here, so it runs a few units per "tick" message
+      slice: +this.env.HARD_SLICE || 2,
+      thinkMs: +this.env.THINK_MS || 2600,
+    };
+  }
+  idleMs() {
+    return +this.env.IDLE_MS || IDLE_MS; // settable so a test doesn't have to wait two hours
   }
   connOf(ws) {
     const a = ws.deserializeAttachment();
@@ -85,17 +100,28 @@ export class GameRoom extends DurableObject {
   // Bring the room into memory (first event after creation, or after hibernation).
   async load(code) {
     if (this.room) return;
-    const data = await this.ctx.storage.get('room');
+    const saved = await this.ctx.storage.get('room');
+    // { v: 2, room, kind, at }; a room saved by an earlier version is the room itself
+    const data = saved && saved.v === 2 ? saved.room : saved;
     this.room = data ? Room.load(this.io(), data, this.cfg()) : new Room(this.io(), code || 'XXXX', this.cfg());
     this.room.reconcile(this.ctx.getWebSockets().map((ws) => this.connOf(ws)));
+    this.alarmAt = await this.ctx.storage.getAlarm(); // when the pending alarm fires, or null
+    this.kind = saved && saved.v === 2 ? saved.kind : (await this.ctx.storage.get('alarm')) || 'idle';
+    this.at = (saved && saved.at) || Date.now(); // last time anything happened here
   }
-  // Save, and set the one alarm: the room's own timer if it wants one, else idle clean-up.
+  // Save the room: one write. The alarm is only touched when it has to be:
+  //   - the room wants a timer (a computer's move, or cover for someone away): set it
+  //   - no alarm is pending at all: set the idle clean-up
+  // An alarm that is already pending is left alone. If it turns out to be stale when it fires
+  // (the player came back; the room was used since), alarm() sorts that out then.
   async flush() {
     const r = this.room;
     if (r.empty) {
       if (r.s.created) {
         // everyone has left: forget the game, and drop any socket that never took a seat
+        await this.ctx.storage.deleteAlarm();
         await this.ctx.storage.deleteAll();
+        this.alarmAt = null;
         this.room = new Room(this.io(), r.s.code, this.cfg());
         for (const ws of this.ctx.getWebSockets()) {
           try {
@@ -108,10 +134,17 @@ export class GameRoom extends DurableObject {
       this.want = null;
       return;
     }
-    await this.ctx.storage.put('room', r.save());
-    await this.ctx.storage.put('alarm', this.want != null ? 'move' : 'idle');
-    await this.ctx.storage.setAlarm(Date.now() + (this.want != null ? this.want : IDLE_MS));
+    const now = Date.now();
+    this.at = now;
+    if (this.want != null) await this.arm('move', now + this.want);
+    else if (this.alarmAt == null) await this.arm('idle', now + this.idleMs());
     this.want = null;
+    await this.ctx.storage.put('room', { v: 2, room: r.save(), kind: this.kind, at: now });
+  }
+  async arm(kind, when) {
+    this.kind = kind;
+    this.alarmAt = when;
+    await this.ctx.storage.setAlarm(when);
   }
 
   async fetch(request) {
@@ -129,27 +162,35 @@ export class GameRoom extends DurableObject {
     pair[1].serializeAttachment({ id });
     if (!this.room.s.created) {
       // nothing is stored for this room yet. If "create" never arrives, the alarm closes the socket.
-      await this.ctx.storage.put('alarm', 'idle');
-      await this.ctx.storage.setAlarm(Date.now() + (+this.env.CLAIM_MS || CLAIM_MS));
+      await this.arm('idle', Date.now() + (+this.env.CLAIM_MS || CLAIM_MS));
     }
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  // How far over the limit this socket is: 0 while it has sent at most FLOOD_N messages within
-  // FLOOD_MS, then 1 for the first message past it, 2 for the next, and so on.
-  flooding(conn) {
+  // How far over the limit `key` is: 0 while it has sent at most `max` messages within FLOOD_MS,
+  // then 1 for the first message past it, 2 for the next, and so on.
+  flooding(key, max) {
     const now = Date.now();
-    let r = this.rate.get(conn);
-    if (!r || now - r.t0 > FLOOD_MS) this.rate.set(conn, (r = { t0: now, n: 0 }));
-    return Math.max(0, ++r.n - FLOOD_N);
+    let r = this.rate.get(key);
+    if (!r || now - r.t0 > FLOOD_MS) this.rate.set(key, (r = { t0: now, n: 0 }));
+    return Math.max(0, ++r.n - max);
   }
 
   async webSocketMessage(ws, data) {
-    const over = this.flooding(this.connOf(ws));
+    const conn = this.connOf(ws);
+    // "tick" messages drive a Hard computer's thinking (see server/room.js): several hundred can
+    // arrive for one move, so they have their own, looser limit, and most of them save nothing.
+    if (data === TICK) {
+      if (this.flooding(conn + ':tick', TICK_N) > 0) return;
+      await this.load();
+      this.want = null;
+      if (this.room.onMessage(conn, { t: 'tick' }) === 'quiet') return;
+      return this.flush(); // that tick finished the search and the computer moved
+    }
+    const over = this.flooding(conn, FLOOD_N);
     if (over) {
       // drop the socket once; anything still in flight behind it is ignored without touching storage
       if (over > 1) return;
-      const conn = this.connOf(ws);
       await this.gone(ws); // frees the seat's connection; the player can come back with their token
       this.rate.set(conn, { t0: Date.now(), n: FLOOD_N + 1 });
       try {
@@ -166,11 +207,14 @@ export class GameRoom extends DurableObject {
     } catch (e) {
       return;
     }
-    if (!msg || typeof msg !== 'object') return;
+    if (!msg || typeof msg !== 'object' || msg.t === 'tick') return;
     await this.load();
     this.want = null;
     this.room.schedule(); // start from the timer the room currently needs
-    this.room.onMessage(this.connOf(ws), msg);
+    if (this.room.onMessage(conn, msg) === 'quiet') {
+      this.want = null; // e.g. a reaction: passed on, nothing to save
+      return;
+    }
     await this.flush();
   }
   async webSocketClose(ws, code) {
@@ -186,6 +230,7 @@ export class GameRoom extends DurableObject {
   }
   async gone(ws) {
     this.rate.delete(this.connOf(ws));
+    this.rate.delete(this.connOf(ws) + ':tick');
     await this.load();
     this.want = null;
     this.room.schedule();
@@ -195,10 +240,15 @@ export class GameRoom extends DurableObject {
 
   async alarm() {
     await this.load();
-    const kind = await this.ctx.storage.get('alarm');
+    this.alarmAt = null; // the alarm that was pending is this one
     const r = this.room;
-    if (kind === 'idle' || r.empty) {
-      // nothing happened for two hours (or everyone left): close up
+    const idleFor = Date.now() - this.at;
+    if (!r.empty && this.kind === 'idle' && idleFor < this.idleMs() - 1000) {
+      // the room has been used since this clean-up was set: look again when it would be due
+      return this.arm('idle', this.at + this.idleMs());
+    }
+    if (this.kind === 'idle' || r.empty) {
+      // nothing happened for two hours (or the room was never created): close up
       for (const ws of this.ctx.getWebSockets()) {
         try {
           ws.close(1000, 'idle');

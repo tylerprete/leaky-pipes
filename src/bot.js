@@ -542,47 +542,89 @@
       }
       return out;
     }
-    function chooseMove(g, p) {
-      if (g.phase === 'wrenchDiscard' || !g.players[p].hand.length) return base.chooseMove(g, p);
-      const t0 = Date.now();
+    // The search as a job that can be run a piece at a time. One unit of work is one move made
+    // on a copy of the game (the candidate itself, or one move of the play-out after it), which
+    // is what the cost is made of. A host with a tight time limit per event (the Cloudflare
+    // Worker) calls step(n) with a small n over many events; chooseMove() below runs it straight
+    // through. Either way the same moves are tried in the same order with the same results.
+    //   job.step(n, onePass)  do up to n units; with onePass, stop when a pass over all candidates ends
+    //   job.done              every pass has been run
+    //   job.passes            passes completed so far
+    //   job.units             upper bound on the units a full search needs
+    //   job.best()            best move over the completed passes (null before the first one ends)
+    function start(g, p) {
+      const settled = (move) => ({ done: true, passes: 1, units: 0, step: () => true, best: move });
+      if (g.phase === 'wrenchDiscard' || !g.players[p].hand.length) return settled(() => base.chooseMove(g, p));
       const cands = candidates(g, p);
-      if (cands.length <= 1) return cands[0] || base.chooseMove(g, p);
+      if (cands.length <= 1) return settled(() => cands[0] || base.chooseMove(g, p));
       if (opts.filter) g = Object.assign({}, g, { _parts: buildParticles(g, p, g.seq * 31 + p) });
       const totals = cands.map(() => 0);
-      let n = 0;
+      let full = null; // totals as of the last completed pass
       const plies = opts.rounds * g.players.length;
-      for (let it = 0; it < opts.r; it++) {
-        if (Date.now() - t0 > opts.budgetMs && n > 0) break;
-        const seed = (g.seq * 7919 + it * 104729 + p) >>> 0;
-        cands.forEach((m, ci) => {
-          const c = clone(g);
-          if (!opts.cheat) determinize(c, p, seed); // cheat: sees real hands and deck order (ceiling test only)
-          let r = LP.applyMove(c, p, m);
-          if (!r.ok) {
-            totals[ci] -= 999;
-            return;
-          }
-          let guard = 0;
-          while (c.phase !== 'over' && guard++ < plies) {
-            const q = c.turn;
-            const mv = roll.chooseMove(c, q);
-            r = LP.applyMove(c, q, mv);
-            if (!r.ok) break;
-          }
-          totals[ci] += evaluate(c, p);
-        });
-        n++;
+      let it = 0; // pass
+      let ci = 0; // candidate within the pass
+      let sim = null; // the play-out in progress
+      let guard = 0;
+      const job = { done: false, passes: 0, units: opts.r * cands.length * (1 + plies), step, best };
+      function next() {
+        sim = null;
+        if (++ci < cands.length) return false;
+        ci = 0;
+        it++;
+        job.passes = it;
+        full = totals.slice();
+        job.done = it >= opts.r;
+        return true;
       }
-      let bi = 0;
-      totals.forEach((t, i) => {
-        if (t > totals[bi] + 1e-9) bi = i;
-      });
-      return cands[bi];
+      function step(n, onePass) {
+        while (n > 0 && !job.done) {
+          if (!sim) {
+            const seed = (g.seq * 7919 + it * 104729 + p) >>> 0;
+            const c = clone(g);
+            if (!opts.cheat) determinize(c, p, seed); // cheat: sees real hands and deck order (ceiling test only)
+            n--;
+            if (!LP.applyMove(c, p, cands[ci]).ok) {
+              totals[ci] -= 999;
+              if (next() && onePass) return job.done;
+              continue;
+            }
+            sim = c;
+            guard = 0;
+          }
+          while (n > 0 && sim.phase !== 'over' && guard < plies) {
+            guard++;
+            n--;
+            const q = sim.turn;
+            if (!LP.applyMove(sim, q, roll.chooseMove(sim, q)).ok) guard = plies;
+          }
+          if (sim.phase === 'over' || guard >= plies) {
+            totals[ci] += evaluate(sim, p);
+            if (next() && onePass) return job.done;
+          }
+        }
+        return job.done;
+      }
+      function best() {
+        if (!full) return null;
+        let bi = 0;
+        full.forEach((t, i) => {
+          if (t > full[bi] + 1e-9) bi = i;
+        });
+        return cands[bi];
+      }
+      return job;
+    }
+    function chooseMove(g, p) {
+      const t0 = Date.now();
+      const job = start(g, p);
+      // at least one pass, then as many more as the time budget allows
+      while (!job.done && !(job.passes > 0 && Date.now() - t0 > opts.budgetMs)) job.step(Infinity, true);
+      return job.best();
     }
     function sameMove(a, b) {
       return a.type === b.type && a.cardId === b.cardId && a.target === b.target && a.i === b.i && !!a.flip === !!b.flip;
     }
-    return { params: P, chooseMove, search: true, buildParticles };
+    return { params: P, chooseMove, start, search: true, buildParticles };
   }
 
   const LEVELS = {

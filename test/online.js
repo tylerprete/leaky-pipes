@@ -34,6 +34,15 @@ const URL = process.env.ONLINE_URL || `http://localhost:${PORT}/`;
     await B.page.waitForFunction(() => window.__leaky.game && window.__leaky.net.gotState);
     const peek = await B.page.evaluate(() => { const g = window.__leaky.game; return { mine: g.players[2].hand.every((c) => c.kind !== 'hidden'), theirs: g.players[0].hand.every((c) => c.kind === 'hidden') && g.players[1].hand.every((c) => c.kind === 'hidden'), deck: g.deck.every((c) => c === 0), table: g.table, seat: window.__leaky.viewer }; });
     if (!(peek.mine && peek.theirs && peek.deck && peek.table === 'shared' && peek.seat === 2)) fail('view wrong ' + JSON.stringify(peek));
+    // reactions: Bo (on a phone) sends one, both see it; the picker closes after sending
+    await B.page.click('[data-act="react"]');
+    await B.page.screenshot({ path: __dirname + '/../shots/online-react-picker.png' });
+    await B.page.click('[data-react="1"]');
+    await A.page.waitForSelector('#reacts .react', { timeout: 3000 }).catch(() => fail('reaction did not reach the other player'));
+    const seen = await A.page.evaluate(() => (document.querySelector('#reacts .react') || {}).textContent || '');
+    if (!/Bo/.test(seen) || !/Ha!/.test(seen)) fail('reaction shown wrong: ' + seen);
+    await A.page.screenshot({ path: __dirname + '/../shots/online-react.png' });
+    if (!(await B.page.evaluate(() => /You/.test((document.querySelector('#reacts .react') || {}).textContent || '') && !document.querySelector('.reactrow')))) fail('sender did not see their own reaction, or the picker stayed open');
     // out-of-turn and illegal moves are refused by the server
     const myTurn = (p) => p.evaluate(() => { const u = window.__leaky, g = u.game; return g.phase !== 'over' && g.turn === u.viewer && !u.busy; });
     const step = async (P) => {

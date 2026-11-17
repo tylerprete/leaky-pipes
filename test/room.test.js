@@ -211,6 +211,122 @@ test('a saved room loads back the same, in every table mode', () => {
   }
 });
 
+// ---- a Hard computer thinking a piece at a time (how the Cloudflare host runs it) ----
+const copyOf = (g) => LP.unpackGame(JSON.parse(JSON.stringify(LP.packGame(g))));
+// A two-seat game against a Hard computer on a host that slices the search. Plays the person's
+// first move and returns what Hard would choose in reply if it thought straight through.
+function hardGame(cfg) {
+  const h = host(Object.assign({ maxLevel: 'hard', slice: 2, thinkMs: 2600 }, cfg || {}));
+  h.say('a', { t: 'create', name: 'Ann', opts: { table: 'shared', deck: 'tuned', level: 'hard' } });
+  h.say('a', { t: 'addbot' });
+  h.say('a', { t: 'start' });
+  const g = h.room.game;
+  assert.strictEqual(g.turn, 0, 'the person moves first in the first game');
+  const mine = aMove(h);
+  const twin = copyOf(g);
+  LP.applyMove(twin, 0, mine);
+  h.expected = B.makeSearchBot({}, { budgetMs: 1e9 }).chooseMove(twin, 1);
+  h.say('a', { t: 'move', move: mine });
+  h.asked = (h.last('a', 'think') || {}).n || 0;
+  h.botEv = () => h.sent.a.filter((m) => m.t === 'state' && m.ev && m.ev.p === 1).pop();
+  return h;
+}
+
+test('sliced Hard: the page is asked for ticks, and with them the computer plays the full Hard move', () => {
+  const h = hardGame();
+  const g = h.room.game;
+  assert.strictEqual(g.turn, 1);
+  assert.ok(h.asked > 20, 'asked for ticks: ' + h.asked);
+  assert.strictEqual(h.timer, 900, 'the usual pause is still the timer');
+  const seq = g.seq;
+  for (let k = 0; k < h.asked; k++) assert.strictEqual(h.say('a', { t: 'tick' }), 'quiet', 'a tick changes nothing by itself');
+  assert.strictEqual(g.seq, seq, 'no move until the pause is up');
+  h.room.onTimer();
+  assert.deepStrictEqual(h.botEv().ev.move, h.expected, 'same move as Hard thinking straight through');
+});
+
+test('sliced Hard: no ticks at all (an old page) means a Normal move, on time', () => {
+  const h = hardGame();
+  const g = h.room.game;
+  const seq = g.seq;
+  h.room.onTimer();
+  assert.notStrictEqual(g.seq, seq, 'it moved at the first timer');
+  assert.ok(h.botEv(), 'and everyone was told');
+});
+
+test('sliced Hard: a slow search gets one extension, then moves the moment it finishes', () => {
+  const h = hardGame();
+  const g = h.room.game;
+  const seq = g.seq;
+  const half = Math.floor(h.asked / 2);
+  for (let k = 0; k < half; k++) h.say('a', { t: 'tick' });
+  h.room.onTimer();
+  assert.strictEqual(g.seq, seq, 'not finished: no move yet');
+  assert.strictEqual(h.timer, 2600, 'one extension');
+  let moved = false;
+  for (let k = half; k < h.asked && !moved; k++) moved = h.say('a', { t: 'tick' }) !== 'quiet';
+  assert.ok(moved && g.seq !== seq, 'the tick that finishes the search makes the move');
+  assert.deepStrictEqual(h.botEv().ev.move, h.expected, 'and it is the full Hard move');
+});
+
+test('sliced Hard: if the ticks stop, the computer moves with what it has when the extension ends', () => {
+  const h = hardGame();
+  const g = h.room.game;
+  const seq = g.seq;
+  for (let k = 0; k < 5; k++) h.say('a', { t: 'tick' });
+  h.room.onTimer(); // extension
+  assert.strictEqual(g.seq, seq);
+  h.room.onTimer(); // out of time
+  assert.notStrictEqual(g.seq, seq, 'it moved');
+});
+
+test('sliced Hard: ticks from outside the game, or beyond what was asked, do nothing', () => {
+  const h = hardGame();
+  const j = h.room.job;
+  h.say('stranger', { t: 'tick' });
+  assert.strictEqual(j.ticks, 0, 'a stranger cannot drive the search');
+  for (let k = 0; k < h.asked + 50; k++) h.say('a', { t: 'tick' });
+  assert.ok(j.ticks <= h.asked, 'no more work than was asked for');
+  assert.ok(j.search.done, 'and that was enough to finish');
+});
+
+test('sliced Hard: if the page sending ticks leaves, another player is asked', () => {
+  const h = host({ maxLevel: 'hard', slice: 2 });
+  h.say('a', { t: 'create', name: 'Ann', opts: { table: 'classic', deck: 'tuned', level: 'hard' } });
+  h.say('b', { t: 'join', name: 'Bob' });
+  h.say('a', { t: 'addbot' });
+  h.say('a', { t: 'start' });
+  while (h.room.s.seats[h.room.game.turn].kind !== 'bot') h.say(connOfTurn(h), { t: 'move', move: aMove(h) });
+  assert.ok(h.last('a', 'think') && !h.last('b', 'think'), 'the host is asked first');
+  h.room.onClose('a', false);
+  assert.ok(h.last('b', 'think'), 'then the player who is still here');
+});
+
+test('a host with no limit thinks in one go: no ticks asked, Hard move at the timer', () => {
+  const h = hardGame({ slice: 0 });
+  assert.strictEqual(h.asked, 0);
+  h.room.onTimer();
+  assert.deepStrictEqual(h.botEv().ev.move, h.expected);
+});
+
+test('reactions reach everyone at the table, one a second each, and change nothing', () => {
+  const h = twoPlayers();
+  const before = JSON.stringify(h.room.save());
+  assert.strictEqual(h.say('b', { t: 'react', k: 1 }), 'quiet', 'nothing to save');
+  assert.deepStrictEqual(h.last('a', 'react'), { t: 'react', seat: 1, k: 1 });
+  assert.deepStrictEqual(h.last('b', 'react'), { t: 'react', seat: 1, k: 1 }, 'the sender sees it too');
+  h.say('b', { t: 'react', k: 2 });
+  assert.strictEqual(h.last('a', 'react').k, 1, 'a second one straight away is dropped');
+  h.clock += 1500;
+  h.say('b', { t: 'react', k: 2 });
+  assert.strictEqual(h.last('a', 'react').k, 2, 'a moment later it goes through');
+  h.clock += 1500;
+  h.say('b', { t: 'react', k: 99 });
+  h.say('stranger', { t: 'react', k: 0 });
+  assert.strictEqual(h.sent.a.filter((m) => m.t === 'react').length, 2, 'unknown reactions and strangers are ignored');
+  assert.strictEqual(JSON.stringify(h.room.save()), before, 'the room is unchanged');
+});
+
 test('names are cleaned and kept unique', () => {
   const h = host();
   h.say('a', { t: 'create', name: '<b>Ann</b>' });

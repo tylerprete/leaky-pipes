@@ -18,13 +18,19 @@ const B = require('../src/bot.js');
 
 const BOT_NAMES = ['Rusty', 'Faucet', 'Gasket'];
 const LEVELS = ['easy', 'normal', 'hard'];
+const REACTIONS = 8; // how many reactions the page offers (src/ui.js)
 const pick = (v, list, d) => (list.includes(v) ? v : d);
 
 class Room {
   constructor(io, code, cfg) {
     this.io = io;
-    this.cfg = Object.assign({ botMs: 900, awayMs: 30000, maxLevel: 'hard' }, cfg || {});
+    // slice: 0 lets a Hard computer think in one go. A host with a tight time limit per event
+    // sets it to how many units of the search to run per "tick" message (see think() below);
+    // thinkMs is how much longer than botMs such a search may take before the computer moves anyway.
+    this.cfg = Object.assign({ botMs: 900, awayMs: 30000, maxLevel: 'hard', slice: 0, thinkMs: 2600 }, cfg || {});
     this.bots = {};
+    this.reacted = {}; // connection -> when it last sent a reaction
+    this.job = null; // a Hard search in progress (kept in memory only; losing it costs one weaker move)
     this.game = null; // live engine game (unpacked)
     this.s = { code, seats: [], host: 0, played: 0, opts: null, touched: io.now(), created: false };
   }
@@ -130,7 +136,10 @@ class Room {
     const g = this.game;
     if (!g || g.phase === 'over' || !this.s.seats.some((x) => x.conn)) return this.io.timer(null); // nobody here: the game waits
     const x = this.s.seats[g.turn];
-    if (x.kind === 'bot') return this.io.timer(g.phase === 'wrenchDiscard' ? Math.min(450, this.cfg.botMs) : this.cfg.botMs);
+    if (x.kind === 'bot') {
+      if (this.sliced()) this.think();
+      return this.io.timer(g.phase === 'wrenchDiscard' ? Math.min(450, this.cfg.botMs) : this.cfg.botMs);
+    }
     if (!x.conn) return this.io.timer(Math.max(this.cfg.botMs, this.cfg.awayMs - (this.io.now() - (x.leftAt || 0))));
     this.io.timer(null);
   }
@@ -141,15 +150,72 @@ class Room {
     const x = this.s.seats[p];
     if (x.kind !== 'bot' && x.conn) return; // they came back
     const level = x.kind === 'bot' ? this.s.opts.level : 'normal';
-    const bot = this.bots[level] || (this.bots[level] = B.forLevel(level));
-    let m = bot.chooseMove(g, p);
+    if (x.kind === 'bot' && this.sliced()) {
+      const j = this.job && this.job.seq === g.seq && this.job.p === p ? this.job : null;
+      if (j && !j.search.done && !j.late && j.ticks > 0) {
+        // the search is under way but not finished: give it a little longer, once
+        j.late = true;
+        return this.io.timer(this.cfg.thinkMs);
+      }
+      // finished, or out of time: the best move found so far; with nothing to go on, a Normal move
+      return this.botMove(p, (j && j.search.best()) || this.bot('normal').chooseMove(g, p));
+    }
+    this.botMove(p, this.bot(level).chooseMove(g, p));
+  }
+  bot(level) {
+    return this.bots[level] || (this.bots[level] = B.forLevel(level));
+  }
+  botMove(p, m) {
+    const g = this.game;
     let r = LP.applyMove(g, p, m);
     if (!r.ok) {
       m = g.players[p].hand.length ? { type: 'discard', cardId: g.players[p].hand[0].id } : { type: 'pass' };
       r = LP.applyMove(g, p, m);
     }
+    this.job = null;
     this.broadcast({ p, move: m });
     this.schedule();
+  }
+
+  // ---- a Hard computer, thinking a piece at a time ----
+  // Hard looks ahead by playing out a few hundred futures: far more work than a host like the
+  // Cloudflare Worker allows in one event. So the search is cut into small pieces, and each piece
+  // runs when a "tick" message arrives. The room asks one player's page to send the ticks: they
+  // carry no information (the page learns nothing and decides nothing), they are only a reason
+  // for the host to run again. If the ticks never come, the computer plays a Normal move instead.
+  sliced() {
+    return this.cfg.slice > 0 && this.s.opts.level === 'hard';
+  }
+  think() {
+    const g = this.game;
+    const p = g.turn;
+    if (this.job && this.job.seq === g.seq && this.job.p === p) {
+      // already on it; if whoever was sending the ticks has gone, ask someone who is here
+      if (!this.s.seats.some((x) => x.conn && x.conn === this.job.to)) this.askTicks();
+      return;
+    }
+    const search = this.bot('hard').start(g, p);
+    // a move on the shared table costs about twice one on a table of your own
+    const per = this.cfg.slice * (g.table === 'shared' ? 1 : 2);
+    this.job = { seq: g.seq, p, search, per, asked: search.done ? 0 : Math.ceil(search.units / per) + 2, ticks: 0, late: false, to: null };
+    this.askTicks();
+  }
+  askTicks() {
+    const j = this.job;
+    if (!j || j.search.done || j.ticks >= j.asked) return;
+    const s = this.s;
+    const host = s.seats[s.host];
+    const who = host && host.kind !== 'bot' && host.conn ? host : s.seats.find((x) => x.kind !== 'bot' && x.conn);
+    j.to = who ? who.conn : null;
+    if (who) this.io.send(who.conn, { t: 'think', n: j.asked - j.ticks });
+  }
+  onTick(conn) {
+    const j = this.job;
+    const g = this.game;
+    if (!j || !g || g.phase === 'over' || j.seq !== g.seq || j.p !== g.turn || j.search.done || j.ticks >= j.asked || this.seatOf(conn) < 0) return 'quiet';
+    j.ticks++;
+    if (!j.search.step(j.per) || !j.late) return 'quiet'; // not finished, or finished early: the timer makes the move
+    this.botMove(j.p, j.search.best()); // finished after its pause was already up: move now
   }
 
   // ---- messages ----
@@ -157,6 +223,8 @@ class Room {
     const s = this.s;
     const io = this.io;
     const fail = (text) => io.send(conn, { t: 'error', text });
+    // Returning 'quiet' tells the host that nothing in the room changed, so there is nothing to save.
+    if (msg.t === 'tick') return this.onTick(conn);
     let seat = this.seatOf(conn);
 
     if (msg.t === 'create') {
@@ -236,12 +304,22 @@ class Room {
       this.broadcast({ p: seat, move });
       return this.schedule();
     }
+    if (msg.t === 'react') {
+      // a quick reaction, shown to everyone at the table. One a second per player; nothing is saved.
+      const k = msg.k | 0;
+      const now = io.now();
+      if (k < 0 || k >= REACTIONS || now - (this.reacted[conn] || 0) < 1000) return 'quiet';
+      this.reacted[conn] = now;
+      for (const x of s.seats) if (x.conn) io.send(x.conn, { t: 'react', seat, k });
+      return 'quiet';
+    }
     if (msg.t === 'leave') return this.onClose(conn, true);
   }
 
   // A connection went away. forGood = they chose to leave (not just a dropped connection).
   onClose(conn, forGood) {
     const s = this.s;
+    delete this.reacted[conn];
     const seat = this.seatOf(conn);
     if (seat < 0) return;
     const x = s.seats[seat];
@@ -257,6 +335,7 @@ class Room {
     this.fixHost();
     this.broadcast(null);
     this.schedule();
+    if (this.job && this.job.to === conn) this.askTicks(); // they were helping a computer think: ask someone else
   }
 }
 
