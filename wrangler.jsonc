@@ -16,6 +16,13 @@
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "GameRoom" }] },
   // SQLite-backed storage: the only kind available on the free plan
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
+  // Limits per network address, to stop a script from opening sockets or rooms without end.
+  // "limit" calls per "period" seconds (period must be 10 or 60); namespace_id is any integer
+  // that is unique within the account. Counts are approximate, per Cloudflare location.
+  "ratelimits": [
+    { "name": "CONNECT_LIMIT", "namespace_id": "2001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "CREATE_LIMIT", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } }
+  ],
   "vars": {
     // strongest computer level allowed. "hard" needs far more CPU per move than the free
     // plan's limit, so keep "normal" unless you are on the paid plan.

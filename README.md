@@ -43,7 +43,7 @@ Test: `node test/online.js` plays a full game with two browsers and a computer, 
 ## Code
 
 - `src/engine.js`: rules engine (placement, leaks, repairs, T's and caps, spout, dead-end analysis, shared-table rules)
-- `src/bot.js`: computer players. A heuristic scorer (Easy/Normal) and a lookahead search (Hard).
+- `src/bot.js`: computer players. A heuristic scorer (Easy/Normal) and a lookahead search (Hard). In the page, Hard runs in a Web Worker built from the engine and bot code already inlined there, so the page stays responsive while it thinks; if the worker can't run, the move is worked out on the page as before.
 - `src/ui.js`, `src/style.css`, `src/page.html`: the single-page game
 - `server/room.js`: the online room logic (seats, hidden hands, computer seats, reconnects)
 - `server/server.js`, `cloudflare/worker.js`: the two hosts for it
@@ -57,7 +57,8 @@ Test: `node test/online.js` plays a full game with two browsers and a computer, 
 
 ```
 npm run build   # writes docs/index.html (the GitHub Pages site)
-npm test        # rules tests
+npm test        # rules tests and online-room tests (Cloudflare runs these before every deploy)
+node test/hard-thread.js   # Hard thinks in a background worker: checks the page stays responsive
 node tools/arena.js '{"kind":"search"}' '{"kind":"v2"}' 2 60
 node tools/why-stuck.js 300 2
 TABLE=shared DECK=tuned node tools/arena.js '{"kind":"v2"}' '{"kind":"v1"}' 3 100

@@ -85,6 +85,9 @@ class Room {
     const p = LP.packGame(g);
     p.rng = 0;
     p.deck = new Array(g.deck.length).fill(0);
+    // card ids follow the order the deck was built in, so an id gives the card away:
+    // only the player who drew a card is told which one it was
+    p.drawn = g.turn === seat ? g.drawn : null;
     p.players = p.players.map((pl, i) => ({
       name: pl.name,
       kind: i === seat ? 'human' : this.s.seats[i].kind === 'bot' ? 'bot' : 'remote',

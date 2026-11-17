@@ -293,6 +293,99 @@
   const isHumanTurn = () => live() && G().phase !== 'over' && G().players[G().turn].kind === 'human' && !ui.modal && !ui.busy;
   const botFor = (level) => ui.bots[level] || (ui.bots[level] = LP.bot.forLevel(level));
 
+  // ---------------------------------------------------------------- background thinking
+  // The Hard computer plays out hundreds of futures per move, about half a second of work.
+  // Done on the page's own thread that freezes animations and taps, so it runs in a Web Worker
+  // built from the engine and bot code already in this page (no second file to load).
+  // If a worker can't be made or stops answering, the move is worked out here instead.
+  const brain = { w: null, off: false, ready: false, n: 0, jobs: new Map() };
+  function brainStart() {
+    if (brain.w || brain.off) return brain.w;
+    try {
+      const src = ['src-engine', 'src-bot'].map((id) => document.getElementById(id).textContent).join('\n') + '\n(' + brainMain + ')();';
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      const w = new Worker(url);
+      w.onmessage = (e) => {
+        brain.ready = true; // it loaded and it answers
+        const job = brain.jobs.get(e.data.id);
+        if (!job) return;
+        brain.jobs.delete(e.data.id);
+        clearTimeout(job.timer);
+        if (e.data.error) job.local();
+        else job.done(e.data.move, e.data.rng);
+      };
+      w.onerror = () => brainStop();
+      brain.w = w;
+      w.postMessage({ id: 0 }); // a first hello, so a worker the browser refuses to run is found out early
+    } catch (e) {
+      brain.off = true;
+    }
+    return brain.w;
+  }
+  // Give up on the worker for good; anything it still owed is worked out on this thread.
+  function brainStop() {
+    brain.off = true;
+    if (brain.w) {
+      try {
+        brain.w.terminate();
+      } catch (e) {
+        /* already gone */
+      }
+    }
+    brain.w = null;
+    const owed = [...brain.jobs.values()];
+    brain.jobs.clear();
+    owed.forEach((job) => {
+      clearTimeout(job.timer);
+      job.local();
+    });
+  }
+  // Runs inside the worker. It must not use anything from this file: only its text is sent over.
+  function brainMain() {
+    const bots = {};
+    self.onmessage = (e) => {
+      const d = e.data;
+      if (!d.game) return self.postMessage({ id: d.id });
+      try {
+        const bot = bots[d.level] || (bots[d.level] = self.LP.bot.forLevel(d.level));
+        const g = self.LP.unpackGame(d.game);
+        const move = bot.chooseMove(g, d.seat);
+        self.postMessage({ id: d.id, move, rng: g.rng }); // choosing can use up random numbers
+      } catch (err) {
+        self.postMessage({ id: d.id, error: String(err) });
+      }
+    };
+  }
+  // The move the computer at `level` would make for `seat`. Only Hard is slow enough to be sent
+  // to the worker. Either way the answer is the same move and leaves the game's random-number
+  // state the same, so a game plays out identically with or without the worker.
+  function think(g, seat, level) {
+    const local = () => {
+      try {
+        return botFor(level).chooseMove(g, seat);
+      } catch (e) {
+        return null; // the game changed under a late answer; the caller drops it
+      }
+    };
+    if (level !== 'hard' || !brainStart()) return Promise.resolve(local());
+    return new Promise((resolve) => {
+      const seq = g.seq;
+      const done = (m, rng) => {
+        if (m && rng != null && g.seq === seq) g.rng = rng; // not if the game has moved on meanwhile
+        resolve(m);
+      };
+      const id = ++brain.n;
+      // a worker that has answered before gets longer than one that may never have started
+      const job = { done, local: () => done(local()), timer: setTimeout(brainStop, brain.ready ? 6000 : 2500) };
+      brain.jobs.set(id, job);
+      try {
+        brain.w.postMessage({ id, seat, level, game: LP.packGame(g) });
+      } catch (e) {
+        brainStop();
+      }
+    });
+  }
+
   function selMoves() {
     if (!ui.sel || !isHumanTurn()) return [];
     const g = G();
@@ -1053,6 +1146,7 @@
     }
     const cur = g.players[g.turn];
     if (cur.kind === 'bot') {
+      if (g.level === 'hard') brainStart(); // have the background thinker ready before its move is due
       ui.busy = true;
       ui.sel = null;
       ui.wrench = false;
@@ -1086,8 +1180,17 @@
     const g = G();
     if (!g || g.phase === 'over') return proceed();
     const p = g.turn;
-    const bot = botFor(g.level || 'normal');
-    const m = bot.chooseMove(g, p);
+    const level = g.level || 'normal';
+    if (level !== 'hard') return botPlay(g, p, botFor(level).chooseMove(g, p));
+    // Hard thinks in the background. By the time it answers, the game may have moved on
+    // (new game, menu opened, undo): then the answer is dropped.
+    const gen = ui.gen;
+    const seq = g.seq;
+    think(g, p, level).then((m) => {
+      if (m && gen === ui.gen && ui.game === g && g.seq === seq && g.turn === p && g.phase !== 'over') botPlay(g, p, m);
+    });
+  }
+  function botPlay(g, p, m) {
     let r = LP.applyMove(g, p, m);
     if (!r.ok) r = LP.applyMove(g, p, g.players[p].hand.length ? { type: 'discard', cardId: g.players[p].hand[0].id } : { type: 'pass' });
     ui.lastActor = p;
@@ -1249,7 +1352,16 @@
     const g = G();
     if (!isHumanTurn()) return;
     // online, other hands are hidden from this page, so the hint uses the bot that only needs mine
-    const m = (ui.net ? ui.hintBot || (ui.hintBot = LP.bot.makeBot()) : botFor('hard')).chooseMove(g, g.turn);
+    if (ui.net) return hintShow(g, (ui.hintBot || (ui.hintBot = LP.bot.makeBot())).chooseMove(g, g.turn));
+    if (ui.hinting === g.seq) return; // already working on it
+    const gen = ui.gen;
+    const seq = (ui.hinting = g.seq);
+    think(g, g.turn, 'hard').then((m) => {
+      ui.hinting = null;
+      if (m && gen === ui.gen && ui.game === g && g.seq === seq && isHumanTurn()) hintShow(g, m);
+    });
+  }
+  function hintShow(g, m) {
     ui.hint = { seq: g.seq, cardId: m.cardId, target: m.target != null ? m.target : g.turn, i: m.i };
     ui.wrench = false;
     if (m.type === 'pass') {
@@ -1888,6 +2000,7 @@
   }
   render();
   window.__leaky = ui;
+  window.__leakyBrain = brain;
   window.__leakyStart = (seats) => startGame(seats);
   window.__leakyRender = () => render();
   window.__leakyProceed = () => proceed();
