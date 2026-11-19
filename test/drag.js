@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
     const ctx = await browser.newContext({ viewport: { width: 820, height: 1180 }, hasTouch: touch, isMobile: touch });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errs.push(e.message));
-    await page.goto('file:///home/claude/leaky/docs/index.html');
+    await page.goto('file://' + require('path').resolve(__dirname, '../docs/index.html'));
     await page.click('[data-act="start"]');
     await page.waitForTimeout(400);
     let placed = 0, attempts = 0;

@@ -8,7 +8,7 @@ const table = process.argv[2] || 'classic';
   const ctx = await browser.newContext({ viewport: { width: 820, height: 1180 }, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errs.push(e.message));
-  await page.goto('file:///home/claude/leaky/docs/index.html');
+  await page.goto('file://' + require('path').resolve(__dirname, '../docs/index.html'));
   await page.click(`[data-table="${table}"]`);
   await page.click('[data-act="start"]');
   let done = false;

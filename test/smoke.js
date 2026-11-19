@@ -1,3 +1,4 @@
+require('fs').mkdirSync(__dirname + '/../shots', { recursive: true }); // screenshots land in shots/ (gitignored)
 const { chromium } = require('playwright');
 (async () => {
   const browser = await chromium.launch();
@@ -5,13 +6,13 @@ const { chromium } = require('playwright');
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/fonts|ERR_|net::/.test(m.text())) errors.push('console: ' + m.text()); });
-  await page.goto('file:///home/claude/leaky/docs/index.html');
+  await page.goto('file://' + require('path').resolve(__dirname, '../docs/index.html'));
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/home/claude/leaky/shots/setup.png' });
+  await page.screenshot({ path: __dirname + '/../shots/setup.png' });
   if (process.env.TABLE) await page.click(`[data-table="${process.env.TABLE}"]`);
   await page.click('[data-act="start"]');
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '/home/claude/leaky/shots/turn1.png' }); console.log('viewBox at start', await page.getAttribute('#board', 'viewBox'));
+  await page.screenshot({ path: __dirname + '/../shots/turn1.png' }); console.log('viewBox at start', await page.getAttribute('#board', 'viewBox'));
 
   // Drive the human seat through the real UI using the bot's choice.
   let shots = 0, steps = 0;
@@ -38,23 +39,23 @@ const { chromium } = require('playwright');
       if (view !== m.target) await page.click(`[data-view="${m.target}"]`);
       const flip = await page.evaluate((id) => !!window.__leaky.flips[id], m.cardId);
       if (m.type !== 'wrench' && !!m.flip !== flip) await page.click('[data-act="turn"]');
-      if (shots < 2 && m.target !== 0) { await page.screenshot({ path: `/home/claude/leaky/shots/attack${shots}.png` }); shots++; }
+      if (shots < 2 && m.target !== 0) { await page.screenshot({ path: `${__dirname}/../shots/attack${shots}.png` }); shots++; }
       await page.click(`#board [data-i="${m.i}"]`);
     }
     await page.waitForTimeout(60);
   }
   await page.waitForTimeout(400);
-  await page.screenshot({ path: '/home/claude/leaky/shots/end.png' });
+  await page.screenshot({ path: __dirname + '/../shots/end.png' });
   const res = await page.evaluate(() => { const g = window.__leaky.game; return { winner: g.winner, turns: g.turns, log: g.log.slice(-3).map(l => l.text) }; });
   console.log(JSON.stringify(res), 'steps', steps);
   // close the result and look at the board
   await page.click('[data-act="see-board"]').catch(() => {});
   await page.waitForTimeout(200);
-  await page.screenshot({ path: '/home/claude/leaky/shots/final-board.png' });
+  await page.screenshot({ path: __dirname + '/../shots/final-board.png' });
   // desktop look
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(200);
-  await page.screenshot({ path: '/home/claude/leaky/shots/desktop.png' });
+  await page.screenshot({ path: __dirname + '/../shots/desktop.png' });
   console.log(errors.length ? errors.join('\n') : 'no page errors');
   await browser.close();
 })();

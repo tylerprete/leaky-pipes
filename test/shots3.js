@@ -1,3 +1,4 @@
+require('fs').mkdirSync(__dirname + '/../shots', { recursive: true }); // screenshots land in shots/ (gitignored)
 // Screenshots of the all-boards layout at several sizes and seat counts.
 // node test/shots3.js [table]   -> shots/v3-<size>-<n>p.png
 const { chromium } = require('playwright');
@@ -15,7 +16,7 @@ const sizes = {
     for (const n of [2, 4]) {
       const page = await browser.newPage({ viewport: vp, deviceScaleFactor: 1 });
       page.on('pageerror', (e) => errors.push(`${name} ${n}p: ${e.message}`));
-      await page.goto('file:///home/claude/leaky/docs/index.html');
+      await page.goto('file://' + require('path').resolve(__dirname, '../docs/index.html'));
       await page.evaluate(() => localStorage.clear());
       await page.reload();
       await page.waitForTimeout(300);
