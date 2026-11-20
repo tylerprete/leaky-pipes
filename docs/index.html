@@ -3071,8 +3071,17 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
       for (let i = 0; i < b.cells.length; i++) {
         if (!inView(i)) continue;
         const [x, y] = pos(i);
-        const tap = i === tapValve;
-        out += `<rect class="hit${targets.has(i) || tap ? ' go' : ''}${tap ? ' tap' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}">${tap ? `<title>${waterIsOff() ? 'Turn the water on' : 'Turn the water off'}</title>` : ''}</rect>`;
+        out += `<rect class="hit${targets.has(i) || i === tapValve ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
+      }
+      if (tapValve >= 0 && inView(tapValve)) {
+        // The handle is small on a phone, so its tap area is a generous circle over the valve card
+        // and a little round it: at least 44 screen pixels across either way.
+        const [x, y] = pos(tapValve);
+        const hx = cellPiece(tapValve, players).flip ? 8 : 42;
+        const vbw = (ui.vbTarget || ui.vb || vb)[2];
+        const scale = svg.clientWidth && vbw ? svg.clientWidth / vbw : 1;
+        const r = Math.max(CH * 0.6, 44 / scale);
+        out += `<circle class="hit go tap" data-i="${tapValve}" cx="${x + (hx + 25) / 2}" cy="${y + 35}" r="${r.toFixed(1)}"><title>${waterIsOff() ? 'Turn the water on' : 'Turn the water off'}</title></circle>`;
       }
     }
     // the spout itself only starts pouring once the water gets there

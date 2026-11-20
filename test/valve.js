@@ -66,6 +66,18 @@ const state = (page) => page.evaluate(() => {
     assert(s.flow && !s.off && !s.svgOff && s.turning === 1, `${table}: tapping it again turns the water back on`);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: `${__dirname}/../shots/valve-${table}-on.png` });
+    // a slightly-off tap (just past the valve card's edge, onto the next cell) still turns it
+    const pt = await page.evaluate(() => {
+      const c = document.querySelector('#board circle.hit.tap');
+      const r = document.querySelector(`#board rect.hit[data-i="${c.dataset.i}"]`).getBoundingClientRect();
+      return { x: r.left - 6, y: r.top + r.height / 2 };
+    });
+    if (touch) await page.touchscreen.tap(pt.x, pt.y); else await page.mouse.click(pt.x, pt.y);
+    await page.waitForTimeout(100);
+    s = await state(page);
+    assert(s.off, `${table}: a tap just beside the valve card turns the water off too`);
+    const size = await page.evaluate(() => document.querySelector('#board circle.hit.tap').getBoundingClientRect().width);
+    assert(size >= 87, `${table}: the tap area is at least 88px across (${size.toFixed(0)})`);
     // tapping other cards after the game is over does nothing odd
     const other = await page.evaluate(() => { const h = [...document.querySelectorAll('#board .hit:not(.tap)')]; return h.length; });
     assert(other > 0, `${table}: other cells are still there`);
