@@ -8,7 +8,7 @@
  *   fonts      saved the first time they load, then always from the saved copy
  * Online play still needs a connection: WebSockets never pass through here.
  */
-const BUILD = '543aab322081';
+const BUILD = 'f3457bdf1528';
 const CACHE = 'leaky-' + BUILD;
 const FONTS = 'leaky-fonts-1';
 const SHELL = ['./', 'icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest'];

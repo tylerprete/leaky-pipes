@@ -225,15 +225,17 @@
     }
     return s;
   }
-  function valveArt() {
+  // handle: {turn} when the winner's valve can be tapped; turn is how long ago (s) it was last turned
+  function valveArt(handle) {
     const m = MAT.iron;
+    const turn = handle && handle.turn != null && handle.turn < 0.8 ? ` turning" style="animation-delay:${(-handle.turn).toFixed(2)}s` : '';
     return (
       tube('M0,35 L27,35', m) +
       ring('W', m) +
       `<rect x="22" y="25" width="11" height="20" rx="2" fill="#8d979e" stroke="#47515a"/>` +
       `<rect x="32" y="32.5" width="7" height="5" fill="#7c868d" stroke="#47515a" stroke-width=".8"/>` +
-      `<ellipse cx="42" cy="35" rx="4.5" ry="15" fill="#c8372b" stroke="#7d1c14" stroke-width="1.2"/>` +
-      `<path d="M42,21 L42,49 M38.5,27 L45.5,43 M45.5,27 L38.5,43" stroke="#7d1c14" stroke-width="1.2"/>`
+      `<g class="handle${handle ? ' live' : ''}"><ellipse cx="42" cy="35" rx="4.5" ry="15" fill="#c8372b" stroke="#7d1c14" stroke-width="1.2"/>` +
+      `<path class="spokes${turn}" d="M42,21 L42,49 M38.5,27 L45.5,43 M45.5,27 L38.5,43" stroke="#7d1c14" stroke-width="1.2"/></g>`
     );
   }
   function spoutArt(pouring) {
@@ -262,7 +264,7 @@
   function cardArtInner(piece, opts) {
     const c = piece.card;
     let s = face();
-    if (c.kind === 'valve') return s + (piece.flip ? MIRROR(valveArt()) : valveArt());
+    if (c.kind === 'valve') return s + (piece.flip ? MIRROR(valveArt(opts.handle)) : valveArt(opts.handle));
     if (c.kind === 'spout') return s + (opts.mirror || piece.flip ? MIRROR(spoutArt(opts.pouring)) : spoutArt(opts.pouring));
     if (c.kind === 'cap') return s + capArt(c, piece.flip, opts.usedCaps) + (piece.wrench ? wrenchIcon() : '');
     if (c.kind === 'wrench')
@@ -674,6 +676,41 @@
       .join('');
   }
 
+  // The winner's valve, when it's on the table being shown (`players`) and the water ran: tapping
+  // its handle turns the water off and on again. -1 otherwise.
+  function waterHandle(players) {
+    const g = G();
+    if (!g || g.phase !== 'over' || g.winner < 0 || !players.includes(g.winner)) return -1;
+    const bb = g.players[g.winner].board;
+    return waterPath(bb).length > 1 ? bb.valve : -1;
+  }
+  function cellPiece(i, players) {
+    const g = G();
+    for (const pi of players) if (g.players[pi].board.cells[i]) return g.players[pi].board.cells[i];
+    return null;
+  }
+  // off until the water is run again (a new game or "Look at the table" starts a new run)
+  const waterIsOff = () => !!ui.waterOff && ui.waterOff.winAt === ui.winAt;
+  function turnHandle() {
+    const g = G();
+    const now = performance.now();
+    const dur = flowSeconds(waterPath(g.players[g.winner].board).length);
+    ui.tapAt = now;
+    if (waterIsOff()) {
+      // back on: the water runs from the valve again
+      ui.waterOff = null;
+      ui.winAt = now;
+      tone(520, 0.12, { type: 'triangle', vol: 0.04, to: 780 });
+      if (!REDUCED) sfx.flow(dur);
+    } else {
+      // off: whatever is in the pipes keeps going (so far: `fill` of the way along)
+      const fill = ui.winAt ? Math.max(0, Math.min(1, ((now - ui.winAt) / 1000 - 0.2) / dur)) : 1;
+      ui.waterOff = { at: now, winAt: ui.winAt, fill };
+      tone(700, 0.12, { type: 'triangle', vol: 0.04, to: 420 });
+    }
+    render();
+  }
+
   // Draw the pipelines of `players` into `svg`. opts: {main, aspect, view}
   function drawSurface(svg, players, opts) {
     const g = G();
@@ -684,6 +721,7 @@
     const vb = opts.view;
     const pos = (i) => [(i % b.w) * (CW + GAP), Math.floor(i / b.w) * (CH + GAP)];
     let arrive = null; // when the winner's water reaches the spout, on the animation clock
+    let offEnd = null; // when the last of it leaves the spout after the valve was turned off
     const boxes = opts.main ? [ui.vb, ui.vbTarget].filter(Boolean) : [vb];
     const cx0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[0])) / (CW + GAP)) - 1);
     const cy0 = Math.max(0, Math.floor(Math.min(...boxes.map((v) => v[1])) / (CH + GAP)) - 1);
@@ -709,6 +747,7 @@
       const lk = LP.leakAt(g.players[g.turn].board);
       if (lk >= 0) targets.set(lk, { move: null, solid: true });
     }
+    const tapValve = opts.main ? waterHandle(players) : -1;
     let out = `<rect class="tableedge" x="-3" y="-3" width="${W + 6}" height="${H + 6}" rx="7"/>`;
     const owner = new Map();
     players.forEach((pi, k) => boards[k].cells.forEach((p, i) => p && owner.set(i, pi)));
@@ -725,7 +764,8 @@
       const used = p.card.kind === 'cap' ? new Set(LP.capsInUse(bb, i).map((u) => u.d)) : null;
       const pop = ui.anim && ui.anim.target === pi && ui.anim.i === i;
       const pouring = g.phase === 'over' && g.winner === pi;
-      out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, mirror: p.card.kind === 'spout' && bb.spoutDir === 'E', tint: tinted ? colorOf(pi) : null })}</g></g>`;
+      const handle = opts.main && i === tapValve ? { turn: ui.tapAt ? (performance.now() - ui.tapAt) / 1000 : null } : null;
+      out += `<g transform="translate(${x} ${y})"><g class="${pop ? 'pop' : ''}">${cardArt(p, { usedCaps: used, pouring, handle, mirror: p.card.kind === 'spout' && bb.spoutDir === 'E', tint: tinted ? colorOf(pi) : null })}</g></g>`;
     }
     const card = ui.sel ? findCard(ui.sel) : null;
     for (const [i, t] of targets) {
@@ -803,6 +843,9 @@
           // --t0 puts every part on one clock that started when the game ended, so a redraw
           // (the result sheet opening, a resize) carries on mid-flow instead of starting over
           const t0 = ui.winAt ? -(performance.now() - ui.winAt) / 1000 : -60;
+          // the valve was turned off: the water already in the pipes runs on out of the spout
+          const off = waterIsOff() ? ui.waterOff : null;
+          const off0 = off ? -(performance.now() - off.at) / 1000 : 0;
           // each card lights up as the water reaches it
           const wet = path.map((i, k) => {
             const [x, y] = pos(i);
@@ -814,8 +857,10 @@
             .map(([ux, uy, dx, dy, sd]) => `<circle class="spl" r="2.3" style="--ux:${ux}px;--uy:${uy}px;--dx:${dx}px;--dy:${dy}px;--sd:${sd}s"/>`)
             .join('');
           const splash = `<g transform="translate(${mx} ${my})"><ellipse class="puddle" cx="0" cy="26" rx="26" ry="5"/><rect class="stream" x="-4" y="-2" width="8" height="28" rx="4"/><g transform="translate(0 24)">${drops}</g></g>`;
-          out += `<g class="winflow" style="--len:${len.toFixed(0)};--neg:${(-len).toFixed(0)};--dur:${dur.toFixed(2)}s;--t0:${t0.toFixed(2)}s">${wet.join('')}<path class="water" d="${d}"/><path class="water-shine" d="${d}"/><path class="water-head" d="${d}" style="stroke-dasharray:0.01 ${(len + 40).toFixed(0)}"/>${splash}</g>`;
+          const offVars = off ? `;--off0:${off0.toFixed(2)}s;--a:${(len * off.fill).toFixed(0)}` : '';
+          out += `<g class="winflow${off ? ' off' : ''}" style="--len:${len.toFixed(0)};--neg:${(-len).toFixed(0)};--dur:${dur.toFixed(2)}s;--t0:${t0.toFixed(2)}s${offVars}">${wet.join('')}<path class="water" d="${d}"/><path class="water-shine" d="${d}"/><path class="water-head" d="${d}" style="stroke-dasharray:0.01 ${(len + 40).toFixed(0)}"/>${splash}</g>`;
           arrive = t0 + 0.2 + dur;
+          if (off) offEnd = off0 + dur;
         }
       }
     });
@@ -827,16 +872,26 @@
       const [x, y] = pos(ui.hint.i);
       out += `<rect class="hintmark" x="${x - 3}" y="${y - 3}" width="${CW + 6}" height="${CH + 6}" rx="8"/>`;
     }
+    if (tapValve >= 0 && inView(tapValve)) {
+      // a soft ring round the winner's valve handle says it can be turned
+      const [x, y] = pos(tapValve);
+      const hx = cellPiece(tapValve, players).flip ? 8 : 42;
+      out += `<ellipse class="handlering" cx="${x + hx}" cy="${y + 35}" rx="9" ry="20"/>`;
+    }
     if (opts.main) {
       for (let i = 0; i < b.cells.length; i++) {
         if (!inView(i)) continue;
         const [x, y] = pos(i);
-        out += `<rect class="hit${targets.has(i) ? ' go' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}"/>`;
+        const tap = i === tapValve;
+        out += `<rect class="hit${targets.has(i) || tap ? ' go' : ''}${tap ? ' tap' : ''}" data-i="${i}" x="${x}" y="${y}" width="${CW}" height="${CH}">${tap ? `<title>${waterIsOff() ? 'Turn the water on' : 'Turn the water off'}</title>` : ''}</rect>`;
       }
     }
     // the spout itself only starts pouring once the water gets there
     if (arrive != null) svg.style.setProperty('--arrive', arrive.toFixed(2) + 's');
     else svg.style.removeProperty('--arrive');
+    svg.classList.toggle('wateroff', offEnd != null);
+    if (offEnd != null) svg.style.setProperty('--offend', offEnd.toFixed(2) + 's');
+    else svg.style.removeProperty('--offend');
     svg.innerHTML = out;
     return targets.size;
   }
@@ -1669,7 +1724,10 @@
       }
       return renderActions();
     }
-    if (t.dataset.i != null && t.closest('#board')) return tryCell(+t.dataset.i);
+    if (t.dataset.i != null && t.closest('#board')) {
+      if (+t.dataset.i === waterHandle(surfaceOf(ui.view))) return turnHandle();
+      return tryCell(+t.dataset.i);
+    }
     if (t.dataset.view != null) {
       if (shared()) {
         const v = +t.dataset.view;

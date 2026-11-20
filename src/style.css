@@ -288,6 +288,25 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
 }
 @keyframes shimmer { to { stroke-dashoffset: -21; } }
 @keyframes fadein { to { opacity: .8; } }
+/* Turning the winner's valve off: the water already in the pipes keeps moving and runs out of the
+   spout (--a is how much of it there is, --off0 when the valve shut), each card dries as the end of
+   it passes, and the stream and splashes stop when it's gone (--offend). Turning it on runs it again. */
+#board .hit.tap { cursor: pointer; }
+#board .handlering { fill: none; stroke: #ffe08a; stroke-width: 2; pointer-events: none; opacity: 0;
+  animation: fadein .4s ease var(--arrive, 0s) forwards, ringpulse 1.6s ease-in-out calc(var(--arrive, 0s) + .4s) infinite; }
+#board.wateroff .handlering { animation: ringpulse 1.6s ease-in-out infinite; }
+@keyframes ringpulse { 0%, 100% { opacity: .25; stroke-width: 1.5; } 50% { opacity: .85; stroke-width: 3; } }
+#board .spokes.turning { transform-box: fill-box; transform-origin: 50% 50%; animation: spin .7s ease-in-out both; }
+@keyframes spin { 0%, 100% { transform: scaleY(1); } 25%, 75% { transform: scaleY(-.15); } 50% { transform: scaleY(-1); } }
+#board .winflow.off .water { stroke-dasharray: var(--a) 99999; animation: drain var(--dur) linear var(--off0) forwards; }
+#board .winflow.off .water-shine { animation: shimmer .7s linear infinite, fadein .5s ease calc(var(--t0) + var(--dur) + .2s) forwards, dry .3s ease var(--off0) forwards; }
+#board .winflow.off .wet { animation: wet .9s ease-out calc(var(--t0) + var(--d)) forwards, dry .6s ease-out calc(var(--off0) + var(--d) - .2s) forwards; }
+#board .winflow.off .stream { animation: stream .25s ease-out calc(var(--t0) + var(--dur) + .2s) forwards, wobble .5s ease-in-out calc(var(--t0) + var(--dur) + .45s) infinite alternate, dry .3s ease-in calc(var(--off0) + var(--dur)) forwards; }
+#board .winflow.off .spl { animation: spl .95s linear calc(var(--t0) + var(--dur) + .3s + var(--sd)) infinite, dry .2s linear calc(var(--off0) + var(--dur) + .2s) forwards; }
+#board .winflow.off .puddle { animation: puddle 1.6s cubic-bezier(.2,.7,.3,1) calc(var(--t0) + var(--dur) + .35s) forwards, dry 2.5s ease-in calc(var(--off0) + var(--dur) + .3s) forwards; }
+#board.wateroff .pour { animation: fadein .2s linear var(--arrive, 0s) forwards, pour 1s ease-in-out calc(var(--arrive, 0s) + .2s) infinite alternate, dry .3s linear var(--offend) forwards; }
+@keyframes drain { from { stroke-dashoffset: 0; } to { stroke-dashoffset: var(--neg); } }
+@keyframes dry { to { opacity: 0; } }
 /* the spout's own trickle waits for the water (--arrive is set on the table when someone has won) */
 #board .pour { opacity: 0; animation: fadein .2s linear var(--arrive, 0s) forwards, pour 1s ease-in-out calc(var(--arrive, 0s) + .2s) infinite alternate; }
 @keyframes pour { from { opacity: .7; } to { opacity: 1; } }
@@ -434,6 +453,7 @@ body.has-modal #app { filter: blur(2px) saturate(.8); }
   #board .stream { opacity: .9; }
   #board .puddle { opacity: .4; }
   #board .pour { opacity: 1; }
+  #board .winflow.off, #board.wateroff .pour { display: none; }
 }
 
 /* ---------- online reactions ---------- */

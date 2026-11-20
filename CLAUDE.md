@@ -58,6 +58,7 @@ for a while. So:
   - `drag.js`, `drag2.js`, `wrenchcard.js`: drag-and-drop on mouse and touch.
   - `offline.js`: the game opens and plays with no connection after one visit.
   - `hard-thread.js`: the Hard computer thinking without freezing the page.
+  - `valve.js`: turning the water off and on with the winner's valve handle.
 - `cf-*.js` run against `wrangler dev` (they start it themselves): restarts, abuse limits, idle
   clean-up, Hard on the Worker. Run them after changing `cloudflare/worker.js` or how rooms are
   saved.
